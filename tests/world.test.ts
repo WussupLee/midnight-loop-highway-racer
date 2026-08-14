@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_MARK_SPACING } from '../src/game/world';
+import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_MARK_SPACING, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -28,6 +28,13 @@ describe('tunnel geometry', () => {
     expect(bounds.max.y).toBeCloseTo(6.8, 4);
     expect(bounds.max.z - bounds.min.z).toBeCloseTo(150, 4);
     geometry.dispose();
+  });
+
+  it('keeps warm fixtures near the crown while using separate blue-green illumination', () => {
+    expect(TUNNEL_CEILING_LIGHT_COLOR).toBe(0xffa64b);
+    expect(TUNNEL_AMBIENT_COLOR).toBe(0x36c9c1);
+    expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeGreaterThan(6);
+    expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeLessThan(6.8);
   });
 });
 

@@ -414,3 +414,10 @@
 - Replaced the yellow left boundary and segmented right boundary with matching solid white shoulder lines on both outside edges of the five-lane freeway.
 - Kept the four internal same-direction lane dividers dashed and added regression coverage that prevents gaps from returning to the outer lines.
 - TypeScript verification, all 52 automated tests, and the production build pass.
+
+## 2026-08-14 — Blue-green tunnel illumination
+
+- Preserved the paired warm orange ceiling fixtures and positioned them relative to the road grade near the tunnel crown, preventing them from drifting out of the curved shell on elevated sections.
+- Separated visible fixture color from environmental light: four overlapping blue-green fill lights now illuminate the asphalt, lower air volume, and curved sidewalls through every tunnel chunk.
+- Strengthened the tunnel concrete's restrained cyan response so the walls remain legible between fixtures while retaining the warm/cool contrast of the reference.
+- TypeScript verification, all 53 automated tests, and the production build pass.

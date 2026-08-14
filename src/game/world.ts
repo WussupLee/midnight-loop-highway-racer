@@ -7,6 +7,9 @@ export const ROAD_HALF_WIDTH = 11.95;
 export const VEHICLE_ROAD_EDGE = 10.32;
 export const ROAD_MARK_SPACING = 10;
 export const OUTER_EDGE_LINE_SEGMENT_LENGTH = 10.4;
+export const TUNNEL_CEILING_LIGHT_COLOR = 0xffa64b;
+export const TUNNEL_AMBIENT_COLOR = 0x36c9c1;
+export const TUNNEL_CEILING_LIGHT_HEIGHT = 6.18;
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -541,9 +544,9 @@ export class HighwayWorld {
       const heading = roadHeading(centerZ);
       const tunnelBaseY = roadCenterY(centerZ) + .42;
       const shellMaterial = new THREE.MeshStandardMaterial({
-        color: 0x182526,
-        emissive: 0x063b3d,
-        emissiveIntensity: .54,
+        color: 0x193031,
+        emissive: 0x075354,
+        emissiveIntensity: .82,
         roughness: .9,
         metalness: .05,
         side: THREE.DoubleSide,
@@ -563,7 +566,7 @@ export class HighwayWorld {
       const tunnelLightGlows = new THREE.InstancedMesh(
         new THREE.BoxGeometry(.72, .08, 5.6),
         new THREE.MeshBasicMaterial({
-          color: new THREE.Color().setRGB(2.6, 1.38, .38), transparent: true,
+          color: new THREE.Color(TUNNEL_CEILING_LIGHT_COLOR).multiplyScalar(2.4), transparent: true,
           opacity: .18, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
         }),
         14,
@@ -575,8 +578,9 @@ export class HighwayWorld {
         for (const side of [-1, 1]) {
           const index = i * 2 + (side > 0 ? 1 : 0);
           const x = roadCenterX(z) + nx * side * 6.2;
-          setInstance(lights, index, x, 6.73, z, 1, 1, 1, h);
-          setInstance(tunnelLightGlows, index, x, 6.72, z, 1, 1, 1, h);
+          const ceilingY = roadCenterY(z) + TUNNEL_CEILING_LIGHT_HEIGHT;
+          setInstance(lights, index, x, ceilingY, z, 1, 1, 1, h);
+          setInstance(tunnelLightGlows, index, x, ceilingY - .01, z, 1, 1, 1, h);
         }
       }
       lights.instanceMatrix.needsUpdate = true;
@@ -608,9 +612,15 @@ export class HighwayWorld {
       }
       wallLights.instanceMatrix.needsUpdate = true;
       wallLightGlows.instanceMatrix.needsUpdate = true;
-      const cyanFill = new THREE.PointLight(0x4fd6cf, 46, 82, 2);
-      cyanFill.position.set(centerX, tunnelBaseY + 3.1, centerZ);
-      group.add(lights, tunnelLightGlows, wallLights, wallLightGlows, cyanFill);
+      const cyanFills = new THREE.Group();
+      cyanFills.name = 'blue-green-tunnel-illumination';
+      for (let index = 0; index < 4; index += 1) {
+        const z = startZ + 18 + index * 38;
+        const cyanFill = new THREE.PointLight(TUNNEL_AMBIENT_COLOR, 78, 58, 1.72);
+        cyanFill.position.set(roadCenterX(z), roadCenterY(z) + 2.85, z);
+        cyanFills.add(cyanFill);
+      }
+      group.add(lights, tunnelLightGlows, wallLights, wallLightGlows, cyanFills);
       return;
     }
 
