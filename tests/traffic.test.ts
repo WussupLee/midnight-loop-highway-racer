@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TRAFFIC_HEADLIGHT_POOL_LENGTH, TRAFFIC_HEADLIGHT_POOL_WIDTH, TRAFFIC_SIGNAL_LEAD_TIME, TRAFFIC_SPAWN_ARCHETYPES, classifyTrafficImpact, initialTrafficPlacement, maximumOccupiedLanesInBand, projectedCollisionFootprint, smoothLaneChange, smoothLaneChangeRate } from '../src/game/traffic';
+import { PLAYER_HEADLIGHT_REFLECTION_START, TRAFFIC_HEADLIGHT_POOL_LENGTH, TRAFFIC_HEADLIGHT_POOL_WIDTH, TRAFFIC_SIGNAL_LEAD_TIME, TRAFFIC_SPAWN_ARCHETYPES, classifyTrafficImpact, initialTrafficPlacement, maximumOccupiedLanesInBand, playerHeadlightReflectionStrength, projectedCollisionFootprint, smoothLaneChange, smoothLaneChangeRate } from '../src/game/traffic';
 import { LANE_WIDTH } from '../src/game/world';
 
 describe('traffic formation planning', () => {
@@ -45,6 +45,14 @@ describe('traffic formation planning', () => {
     expect(TRAFFIC_HEADLIGHT_POOL_WIDTH).toBeCloseTo(8.4 * 3, 6);
     expect(TRAFFIC_HEADLIGHT_POOL_WIDTH).toBeGreaterThan(LANE_WIDTH * 6);
     expect(TRAFFIC_HEADLIGHT_POOL_LENGTH).toBeGreaterThan(32);
+  });
+
+  it('shows player-headlight reflection early and strengthens it while following directly', () => {
+    expect(PLAYER_HEADLIGHT_REFLECTION_START).toBeGreaterThanOrEqual(80);
+    expect(playerHeadlightReflectionStrength(75, 0)).toBeGreaterThan(.1);
+    expect(playerHeadlightReflectionStrength(30, 0)).toBeGreaterThan(playerHeadlightReflectionStrength(75, 0));
+    expect(playerHeadlightReflectionStrength(30, 3.2)).toBe(0);
+    expect(playerHeadlightReflectionStrength(-2, 0)).toBe(0);
   });
 
   it('signals before moving and eases a lane change to rest at both ends', () => {

@@ -38,6 +38,7 @@ export interface TrafficVehicle {
   wheelMeshes: THREE.Mesh[];
   brakeLights: THREE.Mesh[];
   brakeGlows: THREE.Sprite[];
+  headlightReflectionGlows: THREE.Sprite[];
   indicatorLights: THREE.Mesh[];
   indicatorGlows: THREE.Sprite[];
 }
@@ -111,6 +112,14 @@ export const TRAFFIC_SPAWN_ARCHETYPES = ['compact', 'compact', 'compact', 'compa
 export const TRAFFIC_HEADLIGHT_POOL_WIDTH = 25.2;
 export const TRAFFIC_HEADLIGHT_POOL_LENGTH = 38;
 export const TRAFFIC_SIGNAL_LEAD_TIME = 1.25;
+export const PLAYER_HEADLIGHT_REFLECTION_START = 90;
+
+export function playerHeadlightReflectionStrength(forwardGap: number, lateralOffset: number): number {
+  if (forwardGap <= 0 || forwardGap >= PLAYER_HEADLIGHT_REFLECTION_START) return 0;
+  const distance = 1 - clamp((forwardGap - 8) / (PLAYER_HEADLIGHT_REFLECTION_START - 8), 0, 1);
+  const alignment = 1 - clamp((Math.abs(lateralOffset) - .55) / 2.35, 0, 1);
+  return clamp(Math.pow(distance, .72) * alignment, 0, 1);
+}
 
 export function smoothLaneChange(progress: number): number {
   const t = clamp(progress, 0, 1);
@@ -196,11 +205,13 @@ function createTrafficModel(
   color: number,
   tailGlowTexture: THREE.Texture,
   indicatorGlowTexture: THREE.Texture,
+  headlightReflectionTexture: THREE.Texture,
 ): {
   group: THREE.Group;
   wheels: THREE.Mesh[];
   brakeLights: THREE.Mesh[];
   brakeGlows: THREE.Sprite[];
+  headlightReflectionGlows: THREE.Sprite[];
   indicatorLights: THREE.Mesh[];
   indicatorGlows: THREE.Sprite[];
 } {
@@ -330,6 +341,27 @@ function createTrafficModel(
   const plate = new THREE.Mesh(new THREE.BoxGeometry(.46, .19, .045), new THREE.MeshStandardMaterial({ color: 0x626966, roughness: .84, metalness: 0 }));
   plate.position.set(0, .48, -dims.length / 2 - .042);
   group.add(plate);
+  const headlightReflectionGlows: THREE.Sprite[] = [];
+  for (const x of [-dims.width * .24, dims.width * .24]) {
+    const reflection = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: headlightReflectionTexture,
+      color: 0xffe8c5,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    }));
+    reflection.position.set(x, archetype === 'truck' ? 1.35 : .88, -dims.length / 2 - .065);
+    const reflectionWidth = archetype === 'truck' ? 1.28 : .92;
+    const reflectionHeight = archetype === 'truck' ? .84 : .58;
+    reflection.scale.set(reflectionWidth, reflectionHeight, 1);
+    reflection.userData.baseWidth = reflectionWidth;
+    reflection.userData.baseHeight = reflectionHeight;
+    reflection.renderOrder = 3;
+    headlightReflectionGlows.push(reflection);
+    group.add(reflection);
+  }
   const headlamp = new THREE.MeshBasicMaterial({ color: 0xeee6d2, toneMapped: false });
   for (const x of [-dims.width * .3, dims.width * .3]) {
     const light = new THREE.Mesh(new THREE.PlaneGeometry(archetype === 'truck' ? .42 : .32, .13), headlamp);
@@ -338,7 +370,7 @@ function createTrafficModel(
     light.position.set(x, archetype === 'truck' ? 1.05 : .59, dims.length / 2 + .002);
     group.add(light);
   }
-  return { group, wheels, brakeLights, brakeGlows, indicatorLights, indicatorGlows };
+  return { group, wheels, brakeLights, brakeGlows, headlightReflectionGlows, indicatorLights, indicatorGlows };
 }
 
 export class TrafficManager {
@@ -353,6 +385,7 @@ export class TrafficManager {
   constructor(private scene: THREE.Scene, private physics: RAPIER.World, private rapier: RapierModule, count = 28) {
     const tailGlowTexture = createTailLightGlowTexture('#ff1739');
     const indicatorGlowTexture = createTailLightGlowTexture('#ffad2f');
+    const headlightReflectionTexture = createTailLightGlowTexture('#ffe7bd');
     for (let i = 0; i < count; i += 1) {
       const roll = this.random();
       const archetype: TrafficArchetype = roll > .96
@@ -361,7 +394,7 @@ export class TrafficManager {
       const dims = ARCHETYPES[archetype];
       const collisionHalfWidth = dims.width * .45;
       const collisionHalfLength = dims.length * .46;
-      const model = createTrafficModel(archetype, COLORS[Math.floor(this.random() * COLORS.length)], tailGlowTexture, indicatorGlowTexture);
+      const model = createTrafficModel(archetype, COLORS[Math.floor(this.random() * COLORS.length)], tailGlowTexture, indicatorGlowTexture, headlightReflectionTexture);
       model.group.visible = false;
       scene.add(model.group);
       const body = physics.createRigidBody(rapier.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -20, -100));
@@ -378,6 +411,7 @@ export class TrafficManager {
         z: -1000, speed: 0, desiredSpeed: 0,
         halfWidth: dims.width / 2, halfLength: dims.length / 2, reaction: this.random() * 4,
         collisionHalfWidth, collisionHalfLength,
+        headlightReflectionGlows: model.headlightReflectionGlows,
         collisionCooldown: 0, lastPlayerDz: Number.POSITIVE_INFINITY, passedPlayer: false,
         wheelMeshes: model.wheels, brakeLights: model.brakeLights, brakeGlows: model.brakeGlows,
         indicatorLights: model.indicatorLights, indicatorGlows: model.indicatorGlows,
@@ -462,6 +496,9 @@ export class TrafficManager {
       (vehicle.indicatorLights[indicatorIndex].material as THREE.MeshBasicMaterial).color.setHex(0x241505);
       (vehicle.indicatorGlows[indicatorIndex].material as THREE.SpriteMaterial).opacity = 0;
     }
+    for (const reflection of vehicle.headlightReflectionGlows) {
+      (reflection.material as THREE.SpriteMaterial).opacity = 0;
+    }
     vehicle.group.visible = true;
     this.syncTransform(vehicle);
   }
@@ -496,6 +533,9 @@ export class TrafficManager {
       vehicle.group.visible = index < activeCount;
       if (!vehicle.group.visible) {
         vehicle.body.setNextKinematicTranslation({ x: 0, y: -20, z: playerZ + 1000 });
+        for (const reflection of vehicle.headlightReflectionGlows) {
+          (reflection.material as THREE.SpriteMaterial).opacity = 0;
+        }
         continue;
       }
       if (vehicle.z < playerZ - 150) this.spawn(vehicle, playerZ + 390 + this.random() * 360, Math.floor(this.random() * LANE_COUNT));
@@ -570,6 +610,26 @@ export class TrafficManager {
       }
       for (const wheel of vehicle.wheelMeshes) wheel.rotation.x -= vehicle.speed * dt / .31;
       this.syncTransform(vehicle);
+      const playerForwardX = Math.sin(playerYaw);
+      const playerForwardZ = Math.cos(playerYaw);
+      const playerRightX = Math.cos(playerYaw);
+      const playerRightZ = -Math.sin(playerYaw);
+      const reflectionDx = vehicle.group.position.x - playerX;
+      const reflectionDz = vehicle.z - playerZ;
+      const reflectionStrength = playerHeadlightReflectionStrength(
+        reflectionDx * playerForwardX + reflectionDz * playerForwardZ,
+        reflectionDx * playerRightX + reflectionDz * playerRightZ,
+      );
+      for (const reflection of vehicle.headlightReflectionGlows) {
+        (reflection.material as THREE.SpriteMaterial).opacity = reflectionStrength * .58;
+        const baseWidth = Number(reflection.userData.baseWidth ?? .92);
+        const baseHeight = Number(reflection.userData.baseHeight ?? .58);
+        reflection.scale.set(
+          baseWidth * (1 + reflectionStrength * .32),
+          baseHeight * (1 + reflectionStrength * .25),
+          1,
+        );
+      }
       const playerDz = vehicle.z - playerZ;
       vehicle.passedPlayer = vehicle.lastPlayerDz > 0 && playerDz <= 0;
       vehicle.lastPlayerDz = playerDz;

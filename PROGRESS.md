@@ -421,3 +421,10 @@
 - Separated visible fixture color from environmental light: four overlapping blue-green fill lights now illuminate the asphalt, lower air volume, and curved sidewalls through every tunnel chunk.
 - Strengthened the tunnel concrete's restrained cyan response so the walls remain legible between fixtures while retaining the warm/cool contrast of the reference.
 - TypeScript verification, all 53 automated tests, and the production build pass.
+
+## 2026-08-14 — Earlier traffic rear-light reflection
+
+- Added a dedicated warm player-headlight reflection response across the rear quarters of traffic vehicles rather than increasing global headlight exposure.
+- The reflection now begins up to 90 m away when following in alignment, grows progressively stronger during approach, and fades laterally so adjacent-lane vehicles do not receive the same glare.
+- Kept the reflection above and away from the license plate to preserve rear-body readability and avoid the previous plate blowout problem.
+- TypeScript verification, all 54 automated tests, and the production build pass.
