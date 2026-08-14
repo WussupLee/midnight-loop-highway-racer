@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTunnelArchGeometry, highwayChunkStartFor } from '../src/game/world';
+import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -28,5 +28,31 @@ describe('tunnel geometry', () => {
     expect(bounds.max.y).toBeCloseTo(6.8, 4);
     expect(bounds.max.z - bounds.min.z).toBeCloseTo(150, 4);
     geometry.dispose();
+  });
+});
+
+describe('highway exit signage', () => {
+  it('starts at exit 50 and increases deterministically at every later sign', () => {
+    const signs = Array.from({ length: 12 }, (_, index) => highwaySignDescriptor(index));
+    expect(signs[0].exitNumber).toBe(50);
+    for (let index = 1; index < signs.length; index += 1) {
+      expect(signs[index].exitNumber).toBeGreaterThan(signs[index - 1].exitNumber);
+      expect(signs[index].exitNumber - signs[index - 1].exitNumber).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('places the first forward sign in chunk 2 and then every seven chunks', () => {
+    expect(highwaySignIndex(-2)).toBeNull();
+    expect(highwaySignIndex(2)).toBe(0);
+    expect(highwaySignIndex(9)).toBe(1);
+    expect(highwaySignIndex(16)).toBe(2);
+    expect(highwaySignIndex(8)).toBeNull();
+  });
+
+  it('varies street names and sign sides without changing between runs', () => {
+    const signs = Array.from({ length: 12 }, (_, index) => highwaySignDescriptor(index));
+    expect(new Set(signs.map((sign) => sign.streetName)).size).toBeGreaterThan(4);
+    expect(new Set(signs.map((sign) => sign.side))).toEqual(new Set(['left', 'right']));
+    expect(highwaySignDescriptor(5)).toEqual(highwaySignDescriptor(5));
   });
 });

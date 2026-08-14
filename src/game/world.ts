@@ -229,27 +229,84 @@ interface Chunk {
   endZ: number;
 }
 
-function createFreewaySignMaterial(title: string, route: string): THREE.MeshBasicMaterial {
+export interface HighwaySignDescriptor {
+  exitNumber: number;
+  streetName: string;
+  side: 'left' | 'right';
+}
+
+const HIGHWAY_STREET_NAMES = [
+  'MERCER AVE', 'HARBOR BLVD', 'WESTGATE WAY', 'CYPRESS ST',
+  'AIRPORT DR', 'RIVERLINE RD', 'SUMMIT AVE', 'BELMONT ST',
+  'ASHLAND WAY', 'COMMERCE BLVD', 'LAUREL AVE', 'FAIRVIEW RD',
+] as const;
+
+export function highwaySignIndex(chunkNumber: number): number | null {
+  const normalized = ((chunkNumber % 7) + 7) % 7;
+  if (chunkNumber < 2 || normalized !== 2) return null;
+  return Math.floor((chunkNumber - 2) / 7);
+}
+
+export function highwaySignDescriptor(index: number): HighwaySignDescriptor {
+  const safeIndex = Math.max(0, Math.floor(index));
+  const exitRandom = seeded(50491);
+  let exitNumber = 50;
+  for (let step = 0; step < safeIndex; step += 1) exitNumber += 1 + Math.floor(exitRandom() * 3);
+  const detailRandom = seeded(7193 + safeIndex * 7919);
+  return {
+    exitNumber,
+    streetName: HIGHWAY_STREET_NAMES[Math.floor(detailRandom() * HIGHWAY_STREET_NAMES.length)],
+    side: detailRandom() < .5 ? 'left' : 'right',
+  };
+}
+
+function createFreewaySignMaterial(descriptor: HighwaySignDescriptor): THREE.MeshBasicMaterial {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
+  canvas.width = 768;
+  canvas.height = 336;
   const context = canvas.getContext('2d')!;
-  context.fillStyle = '#17452c';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = '#e8eee2';
-  context.lineWidth = 10;
-  context.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
-  context.fillStyle = '#f2f3e9';
+  context.fillStyle = '#08704b';
+  context.beginPath();
+  context.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 18);
+  context.fill();
+  context.strokeStyle = '#f2f4ea';
+  context.lineWidth = 9;
+  context.stroke();
+  context.beginPath();
+  context.moveTo(10, 92);
+  context.lineTo(canvas.width - 10, 92);
+  context.lineWidth = 7;
+  context.stroke();
+  context.fillStyle = '#f6f7ef';
   context.textAlign = 'center';
-  context.font = '700 58px Arial Narrow, Arial, sans-serif';
-  context.fillText(title, 256, 92);
-  context.font = '600 42px Arial Narrow, Arial, sans-serif';
-  context.fillText(route, 256, 151);
-  context.font = '700 54px Arial, sans-serif';
-  context.fillText('\u2193', 256, 218);
+  context.textBaseline = 'middle';
+  context.font = '700 60px "Arial Narrow", "DIN Condensed", Arial, sans-serif';
+  context.fillText(`EXIT  ${descriptor.exitNumber}`, canvas.width / 2, 51);
+  context.font = '600 67px "Arial Narrow", "DIN Condensed", Arial, sans-serif';
+  context.fillText(descriptor.streetName, canvas.width / 2, 157);
+
+  const arrowDirection = descriptor.side === 'right' ? 1 : -1;
+  const startX = canvas.width / 2 - arrowDirection * 34;
+  const startY = 286;
+  const endX = canvas.width / 2 + arrowDirection * 72;
+  const endY = 211;
+  context.beginPath();
+  context.moveTo(startX, startY);
+  context.lineTo(endX, endY);
+  context.strokeStyle = '#f6f7ef';
+  context.lineWidth = 28;
+  context.lineCap = 'square';
+  context.stroke();
+  context.beginPath();
+  context.moveTo(endX, endY);
+  context.lineTo(endX - arrowDirection * 58, endY + 3);
+  context.moveTo(endX, endY);
+  context.lineTo(endX - arrowDirection * 7, endY + 58);
+  context.lineWidth = 25;
+  context.stroke();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
+  texture.anisotropy = 8;
   return new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
 }
 
@@ -269,11 +326,6 @@ export class HighwayWorld {
   private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x101112, emissive: 0x090908, emissiveIntensity: 0.288, roughness: 0.86 });
   private readonly sodiumMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(3.4, 2.05, .76), toneMapped: false });
   private readonly neutralLightMaterial = new THREE.MeshBasicMaterial({ color: 0xe5e2d4, toneMapped: false });
-  private readonly signMaterials = [
-    createFreewaySignMaterial('DOWNTOWN', 'EXIT 12A'),
-    createFreewaySignMaterial('AIRPORT', 'SOUTH 45'),
-    createFreewaySignMaterial('MERCER AVE', '1 MILE'),
-  ];
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     const asphalt = createAsphaltTexture(renderer);
@@ -350,6 +402,15 @@ export class HighwayWorld {
   private disposeChunk(group: THREE.Group): void {
     group.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.Line) object.geometry.dispose();
+
+      if (object instanceof THREE.Mesh && object.userData.disposeMaterial) {
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          const mappedMaterial = material as THREE.Material & { map?: THREE.Texture | null };
+          mappedMaterial.map?.dispose();
+          mappedMaterial.dispose();
+        }
+      }
     });
   }
 
@@ -680,7 +741,8 @@ export class HighwayWorld {
     group.add(poles, lamps, lampGlows);
 
     if (Math.abs(chunkNumber % 9) === 4) this.addOverpass(group, centerZ);
-    if (Math.abs(chunkNumber % 7) === 2) this.addSign(group, centerZ + 30, random);
+    const signIndex = highwaySignIndex(chunkNumber);
+    if (signIndex !== null) this.addSign(group, centerZ + 30, highwaySignDescriptor(signIndex));
   }
 
   private addOverpass(group: THREE.Group, z: number): void {
@@ -698,23 +760,29 @@ export class HighwayWorld {
     }
   }
 
-  private addSign(group: THREE.Group, z: number, random: () => number): void {
+  private addSign(group: THREE.Group, z: number, descriptor: HighwaySignDescriptor): void {
     const h = roadHeading(z);
     const center = roadCenterX(z);
     const gantry = new THREE.Group();
     const beamMaterial = new THREE.MeshStandardMaterial({ color: 0x576268, roughness: 0.45, metalness: 0.75 });
     const beam = new THREE.Mesh(new THREE.BoxGeometry(24, 0.2, 0.2), beamMaterial);
-    beam.position.y = 6.2;
+    beam.position.y = 7.35;
     gantry.add(beam);
     for (const side of [-1, 1]) {
-      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.18, 6.2, 0.18), beamMaterial);
-      pole.position.set(side * 11.45, 3.05, 0);
+      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.18, 7.35, 0.18), beamMaterial);
+      pole.position.set(side * 11.45, 3.625, 0);
       gantry.add(pole);
     }
-    const signIndex = Math.floor(random() * this.signMaterials.length);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(7.1, 2.4, 0.14), this.signMaterials[signIndex]);
-    sign.position.set(random() > 0.5 ? 4.2 : -4.2, 5.25, 0);
-    gantry.add(sign);
+    const signSide = descriptor.side === 'right' ? -1 : 1;
+    const signMaterial = createFreewaySignMaterial(descriptor);
+    const backing = new THREE.Mesh(new THREE.BoxGeometry(7.7, 3.08, .12), new THREE.MeshStandardMaterial({ color: 0x26332f, roughness: .68, metalness: .28 }));
+    backing.userData.disposeMaterial = true;
+    backing.position.set(signSide * 6.15, 5.74, .035);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.55, 2.94), signMaterial);
+    sign.userData.disposeMaterial = true;
+    sign.position.set(signSide * 6.15, 5.74, -.031);
+    sign.rotation.y = Math.PI;
+    gantry.add(backing, sign);
     gantry.position.set(center, roadCenterY(z), z);
     gantry.rotation.y = h;
     group.add(gantry);

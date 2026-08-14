@@ -399,3 +399,12 @@
 - Retained the existing two-consecutive-chunk procedural cadence, producing occasional longer tunnel runs rather than constant tunnels.
 - Added regression coverage for tunnel width, crown height, road-level sides, and longitudinal span.
 - TypeScript verification, all 48 automated tests, and the production build pass.
+
+## 2026-08-14 — Progressive randomized exit signage
+
+- Rebuilt the sign face as a larger realistic green freeway panel with a rounded reflective border, top divider, condensed white typography, dedicated `EXIT` header, street-name line, and a drawn diagonal exit arrow.
+- Exit numbering begins at 50 and increases by a deterministic randomized 1–3 numbers at every later sign, preserving progression across procedural chunk recycling.
+- Added twelve low-attention fictional street names and deterministic left/right sign placement. The arrow points toward the same visual side as its sign.
+- Raised and enlarged the gantry/sign proportions while preserving safe highway clearance and added a separate dark metal backing.
+- Added regression coverage for exit progression, sign cadence, street-name variety, deterministic generation, and both sign sides.
+- TypeScript verification, all 51 automated tests, and the production build pass.
