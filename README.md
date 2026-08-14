@@ -1,5 +1,7 @@
 # MIDNIGHT LOOP
 
+**[Play MIDNIGHT LOOP in your browser](https://wussuplee.github.io/midnight-loop-highway-racer/)**
+
 The hosted version is deployed automatically to GitHub Pages whenever the default branch is updated.
 
 MIDNIGHT LOOP is an original browser-based 3D highway score-attack racer. It combines force-integrated arcade-simulation handling, five lanes of independent traffic, close-pass scoring, a rechargeable boost system, a persistent local record, and a gritty early-2000s American freeway atmosphere. It uses no licensed cars, brands, maps, or proprietary game assets. The local build includes the user-supplied background track described below.
