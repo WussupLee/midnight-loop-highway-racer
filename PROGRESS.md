@@ -390,3 +390,12 @@
 - Removed the player car's two remaining front lens planes entirely; the real spotlight and asphalt wash remain, so no visible rectangular lamp geometry can float ahead during a drift.
 - Fixed the soundtrack URL to resolve under both localhost and the GitHub Pages repository subpath, raised its mix from .24 to .34, and initiates playback immediately inside the Start Run user gesture.
 - Added regression coverage for local and GitHub Pages soundtrack URLs.
+
+## 2026-08-14 — Curved cyan tunnel environment
+
+- Replaced the occasional flat-roof covered sections with a full 25.8 m-wide elliptical concrete arch that curves continuously from both walls across the ceiling.
+- Added repeated transverse structural ribs so the tunnel reads as a three-dimensional tube at speed rather than a roof plane.
+- Preserved the long warm overhead fixtures and their bloom while adding cyan/blue-green wall bars, additive wall glow, a restrained central cyan fill, and cool emissive concrete response.
+- Retained the existing two-consecutive-chunk procedural cadence, producing occasional longer tunnel runs rather than constant tunnels.
+- Added regression coverage for tunnel width, crown height, road-level sides, and longitudinal span.
+- TypeScript verification, all 48 automated tests, and the production build pass.

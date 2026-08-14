@@ -178,6 +178,51 @@ function setInstance(instance: THREE.InstancedMesh, index: number, x: number, y:
   instance.setMatrixAt(index, matrix);
 }
 
+export function createTunnelArchGeometry(length: number, halfWidth = 12.9, height = 6.8, segments = 24): THREE.BufferGeometry {
+  const vertices: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let index = 0; index <= segments; index += 1) {
+    const progress = index / segments;
+    const angle = progress * Math.PI;
+    const x = Math.cos(angle) * halfWidth;
+    const y = Math.sin(angle) * height;
+    vertices.push(x, y, -length / 2, x, y, length / 2);
+    uvs.push(progress, 0, progress, 1);
+    if (index < segments) {
+      const base = index * 2;
+      indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createTunnelRibGeometry(length: number, halfWidth = 12.82, height = 6.74, archSegments = 24, ribCount = 9): THREE.BufferGeometry {
+  const vertices: number[] = [];
+  for (let rib = 0; rib < ribCount; rib += 1) {
+    const z = -length / 2 + 8 + rib * ((length - 16) / Math.max(1, ribCount - 1));
+    for (let segment = 0; segment < archSegments; segment += 1) {
+      const firstAngle = segment / archSegments * Math.PI;
+      const secondAngle = (segment + 1) / archSegments * Math.PI;
+      vertices.push(
+        Math.cos(firstAngle) * halfWidth, Math.sin(firstAngle) * height, z,
+        Math.cos(secondAngle) * halfWidth, Math.sin(secondAngle) * height, z,
+      );
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 interface Chunk {
   group: THREE.Group;
   startZ: number;
@@ -304,7 +349,7 @@ export class HighwayWorld {
 
   private disposeChunk(group: THREE.Group): void {
     group.traverse((object) => {
-      if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
+      if (object instanceof THREE.Mesh || object instanceof THREE.Line) object.geometry.dispose();
     });
   }
 
@@ -431,10 +476,26 @@ export class HighwayWorld {
     if (inTunnel) {
       const centerX = roadCenterX(centerZ);
       const heading = roadHeading(centerZ);
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(26, 0.8, this.chunkLength + 1), new THREE.MeshStandardMaterial({ color: 0x171715, roughness: 0.82, metalness: 0.12 }));
-      roof.position.set(centerX, 7.2, centerZ);
-      roof.rotation.y = heading;
-      group.add(roof);
+      const tunnelBaseY = roadCenterY(centerZ) + .42;
+      const shellMaterial = new THREE.MeshStandardMaterial({
+        color: 0x182526,
+        emissive: 0x063b3d,
+        emissiveIntensity: .54,
+        roughness: .9,
+        metalness: .05,
+        side: THREE.DoubleSide,
+      });
+      const shell = new THREE.Mesh(createTunnelArchGeometry(this.chunkLength + 2), shellMaterial);
+      shell.position.set(centerX, tunnelBaseY, centerZ);
+      shell.rotation.y = heading;
+      shell.receiveShadow = true;
+      const ribs = new THREE.LineSegments(
+        createTunnelRibGeometry(this.chunkLength + 1),
+        new THREE.LineBasicMaterial({ color: 0x426667, transparent: true, opacity: .48 }),
+      );
+      ribs.position.copy(shell.position);
+      ribs.rotation.copy(shell.rotation);
+      group.add(shell, ribs);
       const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.06, 4.5), this.sodiumMaterial, 14);
       const tunnelLightGlows = new THREE.InstancedMesh(
         new THREE.BoxGeometry(.72, .08, 5.6),
@@ -457,7 +518,36 @@ export class HighwayWorld {
       }
       lights.instanceMatrix.needsUpdate = true;
       tunnelLightGlows.instanceMatrix.needsUpdate = true;
-      group.add(lights, tunnelLightGlows);
+      const wallLights = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(.16, .58, 1.65),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(.45, 2.2, 2.12), toneMapped: false }),
+        16,
+      );
+      const wallLightGlows = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(.48, 1.18, 2.9),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color().setRGB(.18, 1.65, 1.62), transparent: true,
+          opacity: .18, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+        }),
+        16,
+      );
+      for (let index = 0; index < 8; index += 1) {
+        const z = startZ + 10 + index * 18.5;
+        const h = roadHeading(z);
+        const nx = Math.cos(h);
+        const roadY = roadCenterY(z);
+        for (const side of [-1, 1]) {
+          const lightIndex = index * 2 + (side > 0 ? 1 : 0);
+          const x = roadCenterX(z) + nx * side * 12.05;
+          setInstance(wallLights, lightIndex, x, roadY + 1.58, z, 1, 1, 1, h);
+          setInstance(wallLightGlows, lightIndex, x - nx * side * .06, roadY + 1.58, z, 1, 1, 1, h);
+        }
+      }
+      wallLights.instanceMatrix.needsUpdate = true;
+      wallLightGlows.instanceMatrix.needsUpdate = true;
+      const cyanFill = new THREE.PointLight(0x4fd6cf, 46, 82, 2);
+      cyanFill.position.set(centerX, tunnelBaseY + 3.1, centerZ);
+      group.add(lights, tunnelLightGlows, wallLights, wallLightGlows, cyanFill);
       return;
     }
 
