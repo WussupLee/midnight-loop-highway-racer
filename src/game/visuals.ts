@@ -88,7 +88,6 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
   const carbon = new THREE.MeshStandardMaterial({ color: 0x080b0d, metalness: .75, roughness: .28 });
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x111820, metalness: .28, roughness: .16, transmission: .08, opacity: .92, transparent: true, envMapIntensity: 1.45 });
   const chrome = new THREE.MeshStandardMaterial({ color: 0xaaa9a1, metalness: 1, roughness: .16 });
-  const white = new THREE.MeshBasicMaterial({ color: 0xe9e4d4, toneMapped: false });
 
   group.add(box(1.94, .16, 4.56, carbon, 0, .25, -.03));
   const mainBody = new THREE.Mesh(createLoftGeometry([
@@ -128,12 +127,6 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
     const housing = box(.52, .2, .075, dark, x, .65, 2.29);
     housing.rotation.z = x < 0 ? -.07 : .07;
     group.add(housing);
-    // A zero-depth lens sits directly on the fascia. Volumetric emissive boxes
-    // showed their side faces during drifts and appeared to float ahead.
-    const headlamp = new THREE.Mesh(new THREE.PlaneGeometry(.38, .115), white);
-    headlamp.position.set(x, .65, 2.329);
-    headlamp.rotation.z = x < 0 ? -.07 : .07;
-    group.add(headlamp);
   }
 
   const trunkDeck = box(1.94, .08, .72, paintMaterial, 0, .84, -1.72);
@@ -185,7 +178,7 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
       map: tailGlowTexture,
       color: 0xff173f,
       transparent: true,
-      opacity: .28,
+      opacity: .34,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       toneMapped: false,
@@ -358,10 +351,10 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
       for (const light of brakeLights) {
         const material = light.material as THREE.MeshStandardMaterial;
         material.color.setHex(braking ? 0xff2747 : 0x8d0b23);
-        material.emissiveIntensity = braking ? 5.4 : 1.45;
+        material.emissiveIntensity = braking ? 5.6 : 1.8;
       }
       for (const glow of brakeGlows) {
-        (glow.material as THREE.SpriteMaterial).opacity = braking ? .66 : .28;
+        (glow.material as THREE.SpriteMaterial).opacity = braking ? .72 : .34;
         const baseSize = Number(glow.userData.baseSize ?? .38);
         const glowSize = baseSize * (braking ? 1.42 : 1);
         glow.scale.set(glowSize, glowSize, 1);
@@ -425,7 +418,7 @@ export function cinematicEase(progress: number): number {
 }
 
 export class RunIntroCamera {
-  private readonly duration = 5.2;
+  private readonly duration = 4.35;
   private elapsed = 0;
   private active = false;
   private readonly cameraPosition = new THREE.Vector3();
@@ -463,14 +456,14 @@ export class RunIntroCamera {
 
     // The complete aerial path stays over the highway centerline. Earlier
     // lateral control points could intersect a randomly generated building.
-    const start = point(-80, 0, 92);
-    const sweep = point(-46, 0, 58);
-    const descend = point(-14, 3, 14);
+    const start = point(-67, 0, 70);
+    const sweep = point(-39, 0, 44);
+    const descend = point(-12, 2.2, 12);
     const chase = chasePose?.position ?? point(-4.35, 0, 2.32);
     cubicPoint(start, sweep, descend, chase, t, this.cameraPosition);
 
-    const skylineLook = point(190, 0, 40);
-    const highwayLook = point(92, 0, 14);
+    const skylineLook = point(170, 0, 34);
+    const highwayLook = point(82, 0, 12);
     const carLook = point(27, 0, 3.2);
     const chaseLook = chasePose?.look ?? point(12.5, 0, .76);
     cubicPoint(skylineLook, highwayLook, carLook, chaseLook, t, this.cameraLook);

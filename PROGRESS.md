@@ -382,3 +382,11 @@
 - Near misses now use the actual collision footprints rather than wider visual-body estimates. Thread the Needle compares the two vehicles' physical overlap times within a 0.65 s window, making staggered two-car gaps register reliably.
 - Scrapes reduce the chain while preserving its remaining timer; major impacts still break it.
 - TypeScript verification, all 45 automated tests, and the production build pass. The only build notice remains Vite's non-fatal bundle-size advisory.
+
+## 2026-08-14 — Player lamp cleanup, faster intro, and hosted music fix
+
+- Increased the player taillights' resting emissive intensity and soft sprite opacity slightly, with a modest braking-state increase for clearer nighttime bloom.
+- Shortened the intro from 5.2 to 4.35 seconds and lowered its opening/sweep control points from 92/58 m to 70/44 m for a faster, closer establishing shot.
+- Removed the player car's two remaining front lens planes entirely; the real spotlight and asphalt wash remain, so no visible rectangular lamp geometry can float ahead during a drift.
+- Fixed the soundtrack URL to resolve under both localhost and the GitHub Pages repository subpath, raised its mix from .24 to .34, and initiates playback immediately inside the Start Run user gesture.
+- Added regression coverage for local and GitHub Pages soundtrack URLs.

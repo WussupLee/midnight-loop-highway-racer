@@ -1,5 +1,9 @@
 import type { VehicleState } from './vehicle';
 
+export function resolveMusicUrl(baseUri: string): string {
+  return new URL('audio/midnight-loop-background.mp3', baseUri).href;
+}
+
 export class GameAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -33,14 +37,19 @@ export class GameAudio {
     this.master.gain.value = .68;
     this.master.connect(this.context.destination);
 
-    this.music = new Audio('/audio/midnight-loop-background.mp3');
+    // Resolve against the current document directory, not the domain root.
+    // This works at localhost and under the GitHub Pages repository subpath.
+    this.music = new Audio(resolveMusicUrl(document.baseURI));
     this.music.loop = true;
     this.music.preload = 'auto';
-    this.music.crossOrigin = 'anonymous';
+    this.music.volume = 1;
     const musicSource = this.context.createMediaElementSource(this.music);
     this.musicGain = this.context.createGain();
-    this.musicGain.gain.value = .24;
+    this.musicGain.gain.value = .34;
     musicSource.connect(this.musicGain).connect(this.master);
+    // Invoke play while the Start Run click still owns browser user activation;
+    // the rest of the procedural audio graph can finish constructing after it.
+    const musicPlayback = this.playMusic();
 
     const engineFilter = this.context.createBiquadFilter();
     engineFilter.type = 'lowpass';
@@ -93,12 +102,13 @@ export class GameAudio {
     this.boostBassGain = this.context.createGain(); this.boostBassGain.gain.value = 0;
     boostBassSource.connect(this.boostBassFilter).connect(this.boostBassGain).connect(this.master); boostBassSource.start();
 
-    await this.playMusic();
+    await musicPlayback;
   }
 
   private async playMusic(): Promise<void> {
     if (!this.music || !this.music.paused) return;
-    try { await this.music.play(); } catch { /* Start Run can be clicked again if playback is blocked. */ }
+    if (this.music.readyState === HTMLMediaElement.HAVE_NOTHING) this.music.load();
+    try { await this.music.play(); } catch { /* A later Start/Resume interaction retries playback. */ }
   }
 
   pauseMusic(): void { this.music?.pause(); }
