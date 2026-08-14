@@ -408,3 +408,9 @@
 - Raised and enlarged the gantry/sign proportions while preserving safe highway clearance and added a separate dark metal backing.
 - Added regression coverage for exit progression, sign cadence, street-name variety, deterministic generation, and both sign sides.
 - TypeScript verification, all 51 automated tests, and the production build pass.
+
+## 2026-08-14 — U.S. freeway outer-edge markings
+
+- Replaced the yellow left boundary and segmented right boundary with matching solid white shoulder lines on both outside edges of the five-lane freeway.
+- Kept the four internal same-direction lane dividers dashed and added regression coverage that prevents gaps from returning to the outer lines.
+- TypeScript verification, all 52 automated tests, and the production build pass.

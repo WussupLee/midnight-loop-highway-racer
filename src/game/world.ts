@@ -5,6 +5,8 @@ export const LANE_OFFSETS = [-7.3, -3.65, 0, 3.65, 7.3] as const;
 export const LANE_COUNT = LANE_OFFSETS.length;
 export const ROAD_HALF_WIDTH = 11.95;
 export const VEHICLE_ROAD_EDGE = 10.32;
+export const ROAD_MARK_SPACING = 10;
+export const OUTER_EDGE_LINE_SEGMENT_LENGTH = 10.4;
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -321,7 +323,6 @@ export class HighwayWorld {
   private readonly roadMaterial: THREE.MeshStandardMaterial;
   private readonly shoulderMaterial = new THREE.MeshStandardMaterial({ color: 0x121211, roughness: 0.76, metalness: 0.1, side: THREE.DoubleSide });
   private readonly laneMaterial = new THREE.MeshStandardMaterial({ color: 0xd4d2c8, emissive: 0x8d8a78, emissiveIntensity: 1.18, roughness: 0.4, metalness: 0.12 });
-  private readonly yellowLineMaterial = new THREE.MeshStandardMaterial({ color: 0xd9aa4b, emissive: 0xa76b19, emissiveIntensity: 1.36, roughness: 0.42, metalness: 0.04 });
   private readonly barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x595956, roughness: 0.82, metalness: 0.06 });
   private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x101112, emissive: 0x090908, emissiveIntensity: 0.288, roughness: 0.86 });
   private readonly sodiumMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(3.4, 2.05, .76), toneMapped: false });
@@ -468,11 +469,12 @@ export class HighwayWorld {
     const laneDividers = [-5.475, -1.825, 1.825, 5.475];
     const markCount = laneDividers.length * 15;
     const marks = new THREE.InstancedMesh(markGeometry, this.laneMaterial, markCount);
-    const leftEdgeMarks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.19, 0.03, 7.5), this.yellowLineMaterial, 15);
-    const rightEdgeMarks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.19, 0.03, 7.5), this.laneMaterial, 15);
+    const outerEdgeGeometry = new THREE.BoxGeometry(0.19, 0.03, OUTER_EDGE_LINE_SEGMENT_LENGTH);
+    const leftEdgeMarks = new THREE.InstancedMesh(outerEdgeGeometry, this.laneMaterial, 15);
+    const rightEdgeMarks = new THREE.InstancedMesh(outerEdgeGeometry.clone(), this.laneMaterial, 15);
     let markIndex = 0;
     for (let i = 0; i < 15; i += 1) {
-      const z = startZ + 4 + i * 10;
+      const z = startZ + ROAD_MARK_SPACING * .5 + i * ROAD_MARK_SPACING;
       const heading = roadHeading(z);
       const centerX = roadCenterX(z);
       const y = roadCenterY(z) + 0.025;

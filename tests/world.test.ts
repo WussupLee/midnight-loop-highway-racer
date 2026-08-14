@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex } from '../src/game/world';
+import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_MARK_SPACING } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -28,6 +28,12 @@ describe('tunnel geometry', () => {
     expect(bounds.max.y).toBeCloseTo(6.8, 4);
     expect(bounds.max.z - bounds.min.z).toBeCloseTo(150, 4);
     geometry.dispose();
+  });
+});
+
+describe('highway lane markings', () => {
+  it('keeps both outer shoulder lines visually continuous', () => {
+    expect(OUTER_EDGE_LINE_SEGMENT_LENGTH).toBeGreaterThan(ROAD_MARK_SPACING);
   });
 });
 
