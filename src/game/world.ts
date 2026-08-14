@@ -10,7 +10,13 @@ export const OUTER_EDGE_LINE_SEGMENT_LENGTH = 10.4;
 export const TUNNEL_CEILING_LIGHT_COLOR = 0xffa64b;
 export const TUNNEL_AMBIENT_COLOR = 0x36c9c1;
 export const TUNNEL_CEILING_LIGHT_HEIGHT = 6.18;
+export const TUNNEL_UNIFORM_FILL_INTENSITY = .78;
 export const ROAD_CURVE_CELL_LENGTH = 900;
+
+export function isTunnelChunkNumber(chunkNumber: number): boolean {
+  const phase = Math.abs(chunkNumber % 13);
+  return phase === 7 || phase === 8;
+}
 
 interface RoadCurveCell {
   start: number;
@@ -55,14 +61,24 @@ function ensureRoadCurveCell(index: number): void {
     const cellIndex = roadCurveCells.length;
     const random = seeded(roadRouteSeed + (cellIndex + 1) * 104729);
     const previousOffset = roadCurveOffsets[cellIndex];
-    const active = random() < .68;
+    const wantsCurve = random() < .68;
     let direction = random() < .5 ? -1 : 1;
     if (previousOffset > 42) direction = -1;
     else if (previousOffset < -42) direction = 1;
-    const shift = active ? direction * (23 + random() * 15) : 0;
+    const magnitude = 23 + random() * 15;
+    const start = 255 + random() * 85;
+    const duration = 390 + random() * 75;
+    const globalStart = cellIndex * ROAD_CURVE_CELL_LENGTH + start;
+    const firstChunk = Math.floor(globalStart / 150);
+    const lastChunk = Math.floor((globalStart + duration) / 150);
+    let crossesTunnel = false;
+    for (let chunk = firstChunk; chunk <= lastChunk; chunk += 1) {
+      if (isTunnelChunkNumber(chunk)) crossesTunnel = true;
+    }
+    const shift = wantsCurve && !crossesTunnel ? direction * magnitude : 0;
     roadCurveCells.push({
-      start: 255 + random() * 85,
-      duration: 390 + random() * 75,
+      start,
+      duration,
       shift,
     });
     roadCurveOffsets.push(previousOffset + shift);
@@ -376,6 +392,8 @@ export class HighwayWorld {
   private readonly chunkCount = 28;
   private nextStartZ = 0;
   private readonly roadMaterial: THREE.MeshStandardMaterial;
+  private readonly tunnelRoadMaterial: THREE.MeshStandardMaterial;
+  private readonly tunnelAmbient = new THREE.HemisphereLight(TUNNEL_AMBIENT_COLOR, 0x12383a, 0);
   private readonly shoulderMaterial = new THREE.MeshStandardMaterial({ color: 0x121211, roughness: 0.76, metalness: 0.1, side: THREE.DoubleSide });
   private readonly laneMaterial = new THREE.MeshStandardMaterial({ color: 0xd4d2c8, emissive: 0x8d8a78, emissiveIntensity: 1.18, roughness: 0.4, metalness: 0.12 });
   private readonly barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x595956, roughness: 0.82, metalness: 0.06 });
@@ -393,7 +411,17 @@ export class HighwayWorld {
       envMapIntensity: 0.09,
       side: THREE.DoubleSide,
     });
-    scene.add(this.group, this.skyline, this.celestial);
+    this.tunnelRoadMaterial = new THREE.MeshStandardMaterial({
+      color: 0x102a2c,
+      map: asphalt,
+      emissive: 0x0a5558,
+      emissiveIntensity: .92,
+      roughness: .68,
+      metalness: .1,
+      envMapIntensity: .12,
+      side: THREE.DoubleSide,
+    });
+    scene.add(this.group, this.skyline, this.celestial, this.tunnelAmbient);
     this.buildDistantSkyline();
     this.reset(16);
   }
@@ -401,6 +429,7 @@ export class HighwayWorld {
   reset(playerZ: number, forceRebuild = false): void {
     if (!forceRebuild && this.chunks.length > 0 && this.covers(playerZ)) {
       this.skyline.position.z = Math.floor(playerZ / 800) * 800;
+      this.tunnelAmbient.intensity = isTunnelChunkNumber(Math.floor(playerZ / this.chunkLength)) ? TUNNEL_UNIFORM_FILL_INTENSITY : 0;
       this.updateCelestial(playerZ);
       return;
     }
@@ -419,6 +448,7 @@ export class HighwayWorld {
       this.nextStartZ = chunk.endZ;
     }
     this.skyline.position.z = Math.floor(playerZ / 800) * 800;
+    this.tunnelAmbient.intensity = isTunnelChunkNumber(Math.floor(playerZ / this.chunkLength)) ? TUNNEL_UNIFORM_FILL_INTENSITY : 0;
     this.updateCelestial(playerZ);
   }
 
@@ -447,6 +477,8 @@ export class HighwayWorld {
       }
     }
     this.skyline.position.z = Math.floor(playerZ / 800) * 800;
+    const tunnelTarget = isTunnelChunkNumber(Math.floor(playerZ / this.chunkLength)) ? TUNNEL_UNIFORM_FILL_INTENSITY : 0;
+    this.tunnelAmbient.intensity += (tunnelTarget - this.tunnelAmbient.intensity) * .08;
     this.updateCelestial(playerZ);
   }
 
@@ -505,7 +537,8 @@ export class HighwayWorld {
     roadGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(roadUvs, 2));
     roadGeometry.setIndex(roadIndices);
     roadGeometry.computeVertexNormals();
-    const road = new THREE.Mesh(roadGeometry, this.roadMaterial);
+    const chunkNumber = Math.floor(startZ / this.chunkLength);
+    const road = new THREE.Mesh(roadGeometry, isTunnelChunkNumber(chunkNumber) ? this.tunnelRoadMaterial : this.roadMaterial);
     road.frustumCulled = false;
     road.renderOrder = -2;
     group.add(road);
@@ -589,16 +622,16 @@ export class HighwayWorld {
     const random = seeded(startZ * 77 + 43);
     const centerZ = (startZ + endZ) / 2;
     const chunkNumber = Math.floor(startZ / this.chunkLength);
-    const inTunnel = Math.abs(chunkNumber % 13) === 7 || Math.abs(chunkNumber % 13) === 8;
+    const inTunnel = isTunnelChunkNumber(chunkNumber);
 
     if (inTunnel) {
       const centerX = roadCenterX(centerZ);
       const heading = roadHeading(centerZ);
       const tunnelBaseY = roadCenterY(centerZ) + .42;
       const shellMaterial = new THREE.MeshStandardMaterial({
-        color: 0x193031,
-        emissive: 0x075354,
-        emissiveIntensity: .82,
+        color: 0x1a3738,
+        emissive: 0x087174,
+        emissiveIntensity: 1.08,
         roughness: .9,
         metalness: .05,
         side: THREE.DoubleSide,
@@ -637,42 +670,7 @@ export class HighwayWorld {
       }
       lights.instanceMatrix.needsUpdate = true;
       tunnelLightGlows.instanceMatrix.needsUpdate = true;
-      const wallLights = new THREE.InstancedMesh(
-        new THREE.BoxGeometry(.16, .58, 1.65),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(.45, 2.2, 2.12), toneMapped: false }),
-        16,
-      );
-      const wallLightGlows = new THREE.InstancedMesh(
-        new THREE.BoxGeometry(.48, 1.18, 2.9),
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color().setRGB(.18, 1.65, 1.62), transparent: true,
-          opacity: .18, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-        }),
-        16,
-      );
-      for (let index = 0; index < 8; index += 1) {
-        const z = startZ + 10 + index * 18.5;
-        const h = roadHeading(z);
-        const nx = Math.cos(h);
-        const roadY = roadCenterY(z);
-        for (const side of [-1, 1]) {
-          const lightIndex = index * 2 + (side > 0 ? 1 : 0);
-          const x = roadCenterX(z) + nx * side * 12.05;
-          setInstance(wallLights, lightIndex, x, roadY + 1.58, z, 1, 1, 1, h);
-          setInstance(wallLightGlows, lightIndex, x - nx * side * .06, roadY + 1.58, z, 1, 1, 1, h);
-        }
-      }
-      wallLights.instanceMatrix.needsUpdate = true;
-      wallLightGlows.instanceMatrix.needsUpdate = true;
-      const cyanFills = new THREE.Group();
-      cyanFills.name = 'blue-green-tunnel-illumination';
-      for (let index = 0; index < 4; index += 1) {
-        const z = startZ + 18 + index * 38;
-        const cyanFill = new THREE.PointLight(TUNNEL_AMBIENT_COLOR, 78, 58, 1.72);
-        cyanFill.position.set(roadCenterX(z), roadCenterY(z) + 2.85, z);
-        cyanFills.add(cyanFill);
-      }
-      group.add(lights, tunnelLightGlows, wallLights, wallLightGlows, cyanFills);
+      group.add(lights, tunnelLightGlows);
       return;
     }
 

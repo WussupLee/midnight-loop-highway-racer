@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT } from '../src/game/world';
+import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_UNIFORM_FILL_INTENSITY } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -62,6 +62,10 @@ describe('tunnel geometry', () => {
     expect(TUNNEL_AMBIENT_COLOR).toBe(0x36c9c1);
     expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeGreaterThan(6);
     expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeLessThan(6.8);
+    expect(TUNNEL_UNIFORM_FILL_INTENSITY).toBeGreaterThan(.7);
+    expect(isTunnelChunkNumber(7)).toBe(true);
+    expect(isTunnelChunkNumber(8)).toBe(true);
+    expect(isTunnelChunkNumber(9)).toBe(false);
   });
 });
 

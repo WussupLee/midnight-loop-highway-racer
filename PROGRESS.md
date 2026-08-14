@@ -437,3 +437,11 @@
 - Forced a coordinated highway rebuild before resetting the player and traffic, ensuring rendering, physics boundaries, lane following, collisions, camera alignment, tunnels, signs, and scenery all use the same new route.
 - Debug runs retain a stable seed for reproducible automated browser scenarios.
 - TypeScript verification, all 56 automated tests, and the production build pass. In-app visual validation remains pending because browser control was unavailable in this task session.
+
+## 2026-08-14 — Even tunnel illumination
+
+- Removed the discrete cyan wall bars, their glow boxes, and the repeated cyan point lights that produced bright pools along the tunnel's left, right, and center.
+- Preserved the warm orange ceiling fixtures as visible overhead elements without using them to create localized road spotlights.
+- Added a brighter uniform blue-green tunnel ambient response for vehicles plus dedicated cyan-emissive asphalt and curved concrete materials, producing continuous illumination without visible hotspots.
+- Prevented randomized highway bends from crossing tunnel chunks so the straight tunnel shell, road, traffic, and barriers remain geometrically aligned.
+- TypeScript verification, all 56 automated tests, and the production build pass.
