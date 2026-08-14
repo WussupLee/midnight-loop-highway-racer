@@ -428,3 +428,12 @@
 - The reflection now begins up to 90 m away when following in alignment, grows progressively stronger during approach, and fades laterally so adjacent-lane vehicles do not receive the same glare.
 - Kept the reflection above and away from the license plate to preserve rear-body readability and avoid the previous plate blowout problem.
 - TypeScript verification, all 54 automated tests, and the production build pass.
+
+## 2026-08-14 — Per-run gradual freeway routes
+
+- Replaced the fixed repeating horizontal road wave with a seeded per-run route profile made from occasional long left/right transitions separated by straight recovery sections.
+- Each curve uses a smooth fifth-order transition with zero steering discontinuity at both ends, modest freeway-safe heading angles, and a 390–465 m bend length.
+- Added mean-reverting lateral placement so procedural curves cannot wander indefinitely away from the city, while each normal restart receives a new route seed.
+- Forced a coordinated highway rebuild before resetting the player and traffic, ensuring rendering, physics boundaries, lane following, collisions, camera alignment, tunnels, signs, and scenery all use the same new route.
+- Debug runs retain a stable seed for reproducible automated browser scenarios.
+- TypeScript verification, all 56 automated tests, and the production build pass. In-app visual validation remains pending because browser control was unavailable in this task session.

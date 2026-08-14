@@ -12,7 +12,7 @@ import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpee
 import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
 import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
 import { ChaseCamera, RunIntroCamera, SpeedStreaks, createPlayerCar } from './game/visuals';
-import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, laneX, roadCenterX, roadCenterY, roadHeading } from './game/world';
+import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading } from './game/world';
 
 type GameMode = 'menu' | 'intro' | 'running' | 'paused' | 'crashing' | 'gameover';
 type ScenarioName = 'normal-pass' | 'near-miss' | 'distant-pass' | 'duplicate' | 'collision' | 'scrape' | 'thread-needle';
@@ -413,6 +413,7 @@ function setMode(next: GameMode): void {
 function startRun(): void {
   void audio.start();
   audio.ui();
+  configureRoadRoute(DEBUG ? 20260814 : Math.floor(Math.random() * 2147483646) + 1);
   vehicle = createVehicleState();
   combo = createCombo();
   stats = { score: 0, nearMisses: 0, driftPoints: 0, topSpeed: vehicle.speedMph, elapsed: 0 };
@@ -432,7 +433,7 @@ function startRun(): void {
   draftedVehicleId = -1;
   draftTime = 0;
   passTracker.reset();
-  highway.reset(vehicle.z);
+  highway.reset(vehicle.z, true);
   traffic.density = Number.parseFloat(trafficSelect.value);
   // The player covers almost 200 m during the aerial introduction. Reserve a
   // clear opening corridor so its center-lane handoff cannot land beside or

@@ -10,6 +10,17 @@ export const OUTER_EDGE_LINE_SEGMENT_LENGTH = 10.4;
 export const TUNNEL_CEILING_LIGHT_COLOR = 0xffa64b;
 export const TUNNEL_AMBIENT_COLOR = 0x36c9c1;
 export const TUNNEL_CEILING_LIGHT_HEIGHT = 6.18;
+export const ROAD_CURVE_CELL_LENGTH = 900;
+
+interface RoadCurveCell {
+  start: number;
+  duration: number;
+  shift: number;
+}
+
+let roadRouteSeed = 481516;
+let roadCurveCells: RoadCurveCell[] = [];
+let roadCurveOffsets: number[] = [0];
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -23,8 +34,49 @@ export function seeded(seed: number): () => number {
   };
 }
 
+export function configureRoadRoute(seed: number): number {
+  roadRouteSeed = Math.abs(Math.floor(seed)) % 2147483647 || 1;
+  roadCurveCells = [];
+  roadCurveOffsets = [0];
+  return roadRouteSeed;
+}
+
+export function getRoadRouteSeed(): number {
+  return roadRouteSeed;
+}
+
+function smootherStep(value: number): number {
+  const t = clamp(value, 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function ensureRoadCurveCell(index: number): void {
+  while (roadCurveCells.length <= index) {
+    const cellIndex = roadCurveCells.length;
+    const random = seeded(roadRouteSeed + (cellIndex + 1) * 104729);
+    const previousOffset = roadCurveOffsets[cellIndex];
+    const active = random() < .68;
+    let direction = random() < .5 ? -1 : 1;
+    if (previousOffset > 42) direction = -1;
+    else if (previousOffset < -42) direction = 1;
+    const shift = active ? direction * (23 + random() * 15) : 0;
+    roadCurveCells.push({
+      start: 255 + random() * 85,
+      duration: 390 + random() * 75,
+      shift,
+    });
+    roadCurveOffsets.push(previousOffset + shift);
+  }
+}
+
 export function roadCenterX(z: number): number {
-  return 18 * Math.sin(z / 520) + 7.5 * Math.sin(z / 205 + 0.72) + 2.5 * Math.sin(z / 89);
+  if (z <= 0) return 0;
+  const cellIndex = Math.floor(z / ROAD_CURVE_CELL_LENGTH);
+  ensureRoadCurveCell(cellIndex);
+  const curve = roadCurveCells[cellIndex];
+  const localZ = z - cellIndex * ROAD_CURVE_CELL_LENGTH;
+  const progress = (localZ - curve.start) / curve.duration;
+  return roadCurveOffsets[cellIndex] + curve.shift * smootherStep(progress);
 }
 
 export function roadCenterY(z: number): number {
@@ -346,8 +398,8 @@ export class HighwayWorld {
     this.reset(16);
   }
 
-  reset(playerZ: number): void {
-    if (this.chunks.length > 0 && this.covers(playerZ)) {
+  reset(playerZ: number, forceRebuild = false): void {
+    if (!forceRebuild && this.chunks.length > 0 && this.covers(playerZ)) {
       this.skyline.position.z = Math.floor(playerZ / 800) * 800;
       this.updateCelestial(playerZ);
       return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTunnelArchGeometry, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_MARK_SPACING, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT } from '../src/game/world';
+import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -14,6 +14,33 @@ describe('highway restart coverage', () => {
     const startZ = highwayChunkStartFor(playerZ);
     expect(startZ).toBeLessThanOrEqual(playerZ - 300);
     expect(startZ + 28 * 150).toBeGreaterThan(playerZ);
+  });
+});
+
+describe('randomized gradual freeway curves', () => {
+  it('recreates the same route from one seed and a different route from another', () => {
+    configureRoadRoute(12051);
+    const first = Array.from({ length: 50 }, (_, index) => roadCenterX(index * 120));
+    configureRoadRoute(12051);
+    const replay = Array.from({ length: 50 }, (_, index) => roadCenterX(index * 120));
+    configureRoadRoute(77291);
+    const alternate = Array.from({ length: 50 }, (_, index) => roadCenterX(index * 120));
+    expect(replay).toEqual(first);
+    expect(alternate).not.toEqual(first);
+    expect(getRoadRouteSeed()).toBe(77291);
+    configureRoadRoute(481516);
+  });
+
+  it('uses occasional long transitions with freeway-safe headings and straight recovery', () => {
+    configureRoadRoute(12051);
+    const samples = Array.from({ length: 90 }, (_, index) => index * 75);
+    expect(samples.some((z) => Math.abs(roadCenterX(z)) > 5)).toBe(true);
+    expect(Math.max(...samples.map((z) => Math.abs(roadHeading(z))))).toBeLessThan(.2);
+    for (let cell = 0; cell < 6; cell += 1) {
+      const recoveryZ = (cell + 1) * ROAD_CURVE_CELL_LENGTH - 55;
+      expect(Math.abs(roadHeading(recoveryZ))).toBeLessThan(.002);
+    }
+    configureRoadRoute(481516);
   });
 });
 
