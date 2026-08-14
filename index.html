@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080806" />
+    <meta name="description" content="MIDNIGHT LOOP - an original early-2000s highway score-attack racer." />
+    <title>MIDNIGHT LOOP</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" aria-label="MIDNIGHT LOOP 3D highway racing game"></canvas>
+      <div id="loading" class="loading-screen">
+        <div class="loader-mark">ML</div>
+        <div class="loader-line"><i></i></div>
+        <p>LOADING INTERSTATE LOOP</p>
+      </div>
+
+      <main id="menu" class="screen menu-screen hidden" aria-labelledby="game-title">
+        <div class="menu-grain"></div>
+        <div class="menu-boot" aria-hidden="true"><span>ML NETWORK</span><b>INTERSTATE SYSTEM // USER 01</b><i>● ONLINE</i></div>
+        <div class="network-cubes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <section class="title-lockup">
+          <div class="eyebrow">INTERSTATE 45 // 02:13 AM</div>
+          <h1 id="game-title">MIDNIGHT <span>LOOP</span></h1>
+          <p class="tagline">FIND THE LINE. MAKE IT HOME.</p>
+          <div class="route-data" aria-hidden="true"><span>ROUTE ID</span><b>SUBJECT A-45</b><span>ACCESS</span><b>OPEN LOOP</b><span>STATUS</span><b>UNSTABLE</b></div>
+        </section>
+        <section class="menu-panel glass-panel">
+          <header><span>RUN SELECT</span><b>01 / 01</b><i>▣</i></header>
+          <button id="start-button" class="primary-button">START RUN <b>&gt;</b></button>
+          <div class="menu-stat"><span>LOCAL RECORD</span><strong id="menu-high-score">000 000</strong></div>
+          <details>
+            <summary>DRIVER CONTROLS</summary>
+            <div class="controls-grid">
+              <kbd>W / &uarr;</kbd><span>Throttle</span><kbd>S / &darr;</kbd><span>Brake / reverse</span>
+              <kbd>A D / &larr; &rarr;</kbd><span>Steer</span><kbd>SPACE</kbd><span>Handbrake</span>
+              <kbd>SHIFT</kbd><span>Boost</span><kbd>C</kbd><span>Switch camera</span>
+              <kbd>R</kbd><span>Recover</span><kbd>ESC</kbd><span>Pause</span>
+              <kbd>M</kbd><span>Mute</span>
+            </div>
+          </details>
+          <details>
+            <summary>VIDEO SETTINGS</summary>
+            <label>Render scale <select id="render-scale"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select></label>
+            <label>Traffic <select id="traffic-setting"><option value="1.32" selected>Dense</option><option value="0.92">Light</option><option value="1.5">Rush hour</option></select></label>
+            <label class="toggle-line">Bloom <input id="bloom-setting" type="checkbox" checked /></label>
+            <label class="toggle-line">Heavy dither <input id="dither-setting" type="checkbox" checked /></label>
+          </details>
+        </section>
+        <div class="menu-prompts" aria-hidden="true"><span>× BACK</span><b>○ CONFIRM</b></div>
+        <footer>ORIGINAL PROTOTYPE // FICTIONAL VEHICLES AND CITY // v1.2</footer>
+      </main>
+
+      <section id="hud" class="hud hidden" aria-live="polite">
+        <div class="hud-top-left">
+          <div class="label">RUN SCORE</div>
+          <div id="score" class="score">000 000</div>
+          <div class="record-line">BEST <span id="high-score">000 000</span></div>
+        </div>
+        <div class="hud-top-center">
+          <div id="callout" class="callout"></div>
+          <div id="combo-wrap" class="combo-wrap"><span>RISK CHAIN</span><b id="combo">&times;1.00</b><i id="combo-timer"></i></div>
+        </div>
+        <div class="hud-bottom-right">
+          <div class="gauge-cluster">
+          <div class="tach gauge gauge-rpm">
+            <div class="tach-arcs"></div>
+            <div class="tach-numerals" aria-hidden="true"><i class="n0">0</i><i class="n1">1</i><i class="n2">2</i><i class="n3">3</i><i class="n4">4</i><i class="n5">5</i><i class="n6">6</i><i class="n7">7</i><i class="n8">8</i></div>
+            <div id="tach-needle" class="tach-needle"></div>
+            <div class="needle-hub"></div>
+            <div class="rpm-label">RPM &times;1000</div>
+            <div class="rpm-window"><b id="rpm-value">4300</b><span>RPM</span></div>
+            <div class="gear-window"><small>GEAR</small><b id="gear">3</b></div>
+          </div>
+          <div class="speed-gauge gauge">
+            <div class="speed-ticks"></div>
+            <div class="speed-numerals" aria-hidden="true"><i class="s0">0</i><i class="s1">40</i><i class="s2">80</i><i class="s3">120</i><i class="s4">160</i><i class="s5">200</i></div>
+            <div id="speed-needle" class="speed-needle"></div>
+            <div class="speed-hub"></div>
+            <div class="speed-block"><b id="speed">080</b><span>MPH</span></div>
+          </div>
+          <div class="boost-shell"><label>BOOST</label><div><i id="boost-fill"></i></div></div>
+          </div>
+        </div>
+        <div id="boost-vignette" class="boost-vignette"></div>
+        <div id="damage-flash" class="damage-flash"></div>
+      </section>
+
+      <div id="crash-blackout" class="crash-blackout" aria-hidden="true"></div>
+
+      <section id="pause" class="screen overlay-screen hidden">
+        <div class="glass-panel compact-panel">
+          <div class="eyebrow">RUN ON HOLD</div><h2>PAUSED</h2>
+          <button id="resume-button" class="primary-button">RESUME RUN</button>
+          <button id="restart-pause-button" class="ghost-button">RESTART</button>
+          <button id="quit-button" class="ghost-button">QUIT TO TITLE</button>
+          <p>WASD / ARROWS - SPACE HANDBRAKE - C CAMERA - SHIFT BOOST - R RECOVER - M MUTE</p>
+        </div>
+      </section>
+
+      <section id="gameover" class="screen overlay-screen hidden">
+        <div class="crash-stripe">CRASHED // RUN OVER</div>
+        <div class="glass-panel result-panel">
+          <div class="eyebrow">FINAL RUN</div><h2 id="final-score">000 000</h2><p class="result-label">RUN SCORE</p>
+          <div class="result-grid">
+            <div><span>BEST CHAIN</span><b id="final-combo">&times;1.00</b></div>
+            <div><span>TOP SPEED</span><b id="final-speed">0 MPH</b></div>
+            <div><span>NEAR MISSES</span><b id="final-misses">0</b></div>
+          </div>
+          <button id="restart-button" class="primary-button">RUN IT BACK <b>R</b></button>
+          <button id="gameover-quit-button" class="ghost-button">TITLE SCREEN</button>
+        </div>
+      </section>
+
+      <aside id="debug-panel" class="debug-panel hidden" aria-label="Gameplay test controls">
+        <pre id="debug-readout"></pre>
+        <div class="debug-actions">
+          <button type="button" data-debug-action="auto">AUTO DRIVE</button>
+          <button type="button" data-debug-action="high-speed">HIGH SPEED</button>
+          <button type="button" data-debug-action="drift">DRIFT TEST</button>
+          <button type="button" data-debug-action="brake">BRAKE TEST</button>
+          <button type="button" data-debug-action="swerve">SWERVE TEST</button>
+          <button type="button" data-debug-action="crash">FORCE CRASH</button>
+          <button type="button" data-debug-scenario="normal-pass">NORMAL PASS</button>
+          <button type="button" data-debug-scenario="near-miss">NEAR MISS</button>
+          <button type="button" data-debug-scenario="distant-pass">DISTANT PASS</button>
+          <button type="button" data-debug-scenario="duplicate">DUPLICATE</button>
+          <button type="button" data-debug-scenario="collision">COLLISION</button>
+          <button type="button" data-debug-scenario="scrape">SIDE SCRAPE</button>
+          <button type="button" data-debug-scenario="thread-needle">THREAD NEEDLE</button>
+        </div>
+      </aside>
+      <div id="mute-indicator" class="mute-indicator hidden">AUDIO MUTED</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
