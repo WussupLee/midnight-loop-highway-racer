@@ -11,7 +11,31 @@ export const TUNNEL_CEILING_LIGHT_COLOR = 0xffa64b;
 export const TUNNEL_AMBIENT_COLOR = 0x36c9c1;
 export const TUNNEL_CEILING_LIGHT_HEIGHT = 6.18;
 export const TUNNEL_UNIFORM_FILL_INTENSITY = .78;
+export const TUNNEL_PANEL_SPACING = 10;
+export const TUNNEL_VENT_SPACING = 30;
+export const TUNNEL_CONDUIT_COUNT = 4;
 export const ROAD_CURVE_CELL_LENGTH = 900;
+
+export interface TunnelWallDetailPlan {
+  panelCountPerSide: number;
+  seamCountPerSide: number;
+  ventCountPerSide: number;
+  serviceBoxCountPerSide: number;
+  slatsPerVent: number;
+  conduitCount: number;
+}
+
+export function tunnelWallDetailPlan(length: number): TunnelWallDetailPlan {
+  const panelCountPerSide = Math.max(1, Math.ceil(length / TUNNEL_PANEL_SPACING));
+  return {
+    panelCountPerSide,
+    seamCountPerSide: panelCountPerSide + 1,
+    ventCountPerSide: Math.max(2, Math.floor(length / TUNNEL_VENT_SPACING)),
+    serviceBoxCountPerSide: Math.max(2, Math.floor(length / 48)),
+    slatsPerVent: 5,
+    conduitCount: TUNNEL_CONDUIT_COUNT,
+  };
+}
 
 export function isTunnelChunkNumber(chunkNumber: number): boolean {
   const phase = Math.abs(chunkNumber % 13);
@@ -251,6 +275,29 @@ function setInstance(instance: THREE.InstancedMesh, index: number, x: number, y:
   instance.setMatrixAt(index, matrix);
 }
 
+function setTunnelWallInstance(
+  instance: THREE.InstancedMesh,
+  index: number,
+  x: number,
+  y: number,
+  z: number,
+  sx: number,
+  sy: number,
+  sz: number,
+  yaw: number,
+  roll = 0,
+): void {
+  const matrix = new THREE.Matrix4();
+  const yawRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const rollRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll);
+  matrix.compose(
+    new THREE.Vector3(x, y, z),
+    yawRotation.multiply(rollRotation),
+    new THREE.Vector3(sx, sy, sz),
+  );
+  instance.setMatrixAt(index, matrix);
+}
+
 export function createTunnelArchGeometry(length: number, halfWidth = 12.9, height = 6.8, segments = 24): THREE.BufferGeometry {
   const vertices: number[] = [];
   const uvs: number[] = [];
@@ -400,6 +447,10 @@ export class HighwayWorld {
   private readonly buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x101112, emissive: 0x090908, emissiveIntensity: 0.288, roughness: 0.86 });
   private readonly sodiumMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(3.4, 2.05, .76), toneMapped: false });
   private readonly neutralLightMaterial = new THREE.MeshBasicMaterial({ color: 0xe5e2d4, toneMapped: false });
+  private readonly tunnelPanelMaterial = new THREE.MeshStandardMaterial({ color: 0x294647, emissive: 0x073638, emissiveIntensity: .38, roughness: .98, metalness: .01 });
+  private readonly tunnelJointMaterial = new THREE.MeshStandardMaterial({ color: 0x071112, roughness: 1, metalness: 0 });
+  private readonly tunnelVentMaterial = new THREE.MeshStandardMaterial({ color: 0x07191a, emissive: 0x031011, emissiveIntensity: .22, roughness: .82, metalness: .22 });
+  private readonly tunnelUtilityMaterial = new THREE.MeshStandardMaterial({ color: 0x193233, emissive: 0x062425, emissiveIntensity: .26, roughness: .7, metalness: .18 });
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     const asphalt = createAsphaltTexture(renderer);
@@ -618,6 +669,131 @@ export class HighwayWorld {
     return { group, startZ, endZ };
   }
 
+  private addTunnelWallDetails(group: THREE.Group, startZ: number, endZ: number): void {
+    const length = endZ - startZ;
+    const plan = tunnelWallDetailPlan(length);
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const panels = new THREE.InstancedMesh(unitBox, this.tunnelPanelMaterial, plan.panelCountPerSide * 2);
+    const seams = new THREE.InstancedMesh(unitBox, this.tunnelJointMaterial, plan.seamCountPerSide * 2);
+    const lowerPlinths = new THREE.InstancedMesh(unitBox, this.tunnelPanelMaterial, 2);
+    const horizontalJoints = new THREE.InstancedMesh(unitBox, this.tunnelJointMaterial, 2);
+    const ventRecesses = new THREE.InstancedMesh(unitBox, this.tunnelVentMaterial, plan.ventCountPerSide * 2);
+    const ventSlats = new THREE.InstancedMesh(unitBox, this.tunnelUtilityMaterial, plan.ventCountPerSide * plan.slatsPerVent * 2);
+    const conduits = new THREE.InstancedMesh(unitBox, this.tunnelUtilityMaterial, plan.conduitCount);
+    const conduitClampsPerRun = Math.floor(length / 15);
+    const conduitClamps = new THREE.InstancedMesh(unitBox, this.tunnelJointMaterial, plan.conduitCount * conduitClampsPerRun);
+    const serviceBoxes = new THREE.InstancedMesh(unitBox, this.tunnelUtilityMaterial, plan.serviceBoxCountPerSide * 2);
+    const serviceDrops = new THREE.InstancedMesh(unitBox, this.tunnelUtilityMaterial, plan.serviceBoxCountPerSide * 2);
+    const wallRoll = .44;
+
+    const panelLength = length / plan.panelCountPerSide;
+    for (let i = 0; i < plan.panelCountPerSide; i += 1) {
+      const z = startZ + (i + .5) * panelLength;
+      const heading = roadHeading(z);
+      const normalX = Math.cos(heading);
+      const roadY = roadCenterY(z);
+      for (const side of [-1, 1]) {
+        const index = i * 2 + (side > 0 ? 1 : 0);
+        const x = roadCenterX(z) + normalX * side * 12.12;
+        setTunnelWallInstance(panels, index, x, roadY + 1.72, z, .22, 2.48, panelLength - .18, heading, side * wallRoll);
+      }
+    }
+
+    for (let i = 0; i < plan.seamCountPerSide; i += 1) {
+      const z = startZ + i * (length / (plan.seamCountPerSide - 1));
+      const heading = roadHeading(z);
+      const normalX = Math.cos(heading);
+      const roadY = roadCenterY(z);
+      for (const side of [-1, 1]) {
+        const index = i * 2 + (side > 0 ? 1 : 0);
+        const x = roadCenterX(z) + normalX * side * 11.98;
+        setTunnelWallInstance(seams, index, x, roadY + 1.72, z, .055, 2.54, .12, heading, side * wallRoll);
+      }
+    }
+
+    const centerZ = (startZ + endZ) / 2;
+    const centerHeading = roadHeading(centerZ);
+    const centerNormalX = Math.cos(centerHeading);
+    const centerX = roadCenterX(centerZ);
+    const centerRoadY = roadCenterY(centerZ);
+    for (const side of [-1, 1]) {
+      const sideIndex = side > 0 ? 1 : 0;
+      setInstance(lowerPlinths, sideIndex, centerX + centerNormalX * side * 12.53, centerRoadY + .46, centerZ, .58, .72, length + .5, centerHeading);
+      setInstance(horizontalJoints, sideIndex, centerX + centerNormalX * side * 10.96, centerRoadY + 3.56, centerZ, .08, .075, length + .35, centerHeading);
+    }
+
+    for (let i = 0; i < plan.ventCountPerSide; i += 1) {
+      const z = startZ + (i + .5) * (length / plan.ventCountPerSide);
+      const heading = roadHeading(z);
+      const normalX = Math.cos(heading);
+      const roadY = roadCenterY(z);
+      for (const side of [-1, 1]) {
+        const ventIndex = i * 2 + (side > 0 ? 1 : 0);
+        const x = roadCenterX(z) + normalX * side * 11.82;
+        setTunnelWallInstance(ventRecesses, ventIndex, x, roadY + 1.35, z, .10, 1.08, 4.25, heading, side * wallRoll);
+        for (let slat = 0; slat < plan.slatsPerVent; slat += 1) {
+          const slatIndex = ventIndex * plan.slatsPerVent + slat;
+          setTunnelWallInstance(
+            ventSlats,
+            slatIndex,
+            roadCenterX(z) + normalX * side * 11.72,
+            roadY + .96 + slat * .19,
+            z,
+            .07,
+            .065,
+            3.72,
+            heading,
+            side * wallRoll,
+          );
+        }
+      }
+    }
+
+    const conduitHeights = [3.72, 4.12];
+    for (const side of [-1, 1]) {
+      conduitHeights.forEach((height, level) => {
+        const conduitIndex = (side > 0 ? 2 : 0) + level;
+        const offset = level === 0 ? 10.78 : 10.18;
+        setInstance(conduits, conduitIndex, centerX + centerNormalX * side * offset, centerRoadY + height, centerZ, .11, .11, length + .4, centerHeading);
+        for (let clampIndex = 0; clampIndex < conduitClampsPerRun; clampIndex += 1) {
+          const z = startZ + (clampIndex + .5) * (length / conduitClampsPerRun);
+          const h = roadHeading(z);
+          const nx = Math.cos(h);
+          const index = conduitIndex * conduitClampsPerRun + clampIndex;
+          setInstance(conduitClamps, index, roadCenterX(z) + nx * side * (offset - .015), roadCenterY(z) + height, z, .16, .22, .055, h);
+        }
+      });
+    }
+
+    for (let i = 0; i < plan.serviceBoxCountPerSide; i += 1) {
+      const z = startZ + (i + .5) * (length / plan.serviceBoxCountPerSide);
+      const heading = roadHeading(z);
+      const normalX = Math.cos(heading);
+      const roadY = roadCenterY(z);
+      for (const side of [-1, 1]) {
+        const index = i * 2 + (side > 0 ? 1 : 0);
+        setTunnelWallInstance(serviceBoxes, index, roadCenterX(z) + normalX * side * 11.49, roadY + 2.28, z, .16, .78, .72, heading, side * wallRoll);
+        setTunnelWallInstance(serviceDrops, index, roadCenterX(z) + normalX * side * 11.08, roadY + 3.05, z, .08, 1.02, .08, heading, side * wallRoll);
+      }
+    }
+
+    panels.name = 'tunnel-concrete-panels';
+    seams.name = 'tunnel-expansion-seams';
+    lowerPlinths.name = 'tunnel-lower-plinths';
+    horizontalJoints.name = 'tunnel-horizontal-joints';
+    ventRecesses.name = 'tunnel-vent-recesses';
+    ventSlats.name = 'tunnel-vent-slats';
+    conduits.name = 'tunnel-electrical-conduits';
+    conduitClamps.name = 'tunnel-conduit-clamps';
+    serviceBoxes.name = 'tunnel-service-boxes';
+    serviceDrops.name = 'tunnel-service-drops';
+    for (const mesh of [panels, seams, lowerPlinths, horizontalJoints, ventRecesses, ventSlats, conduits, conduitClamps, serviceBoxes, serviceDrops]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+  }
+
   private addRoadside(group: THREE.Group, startZ: number, endZ: number): void {
     const random = seeded(startZ * 77 + 43);
     const centerZ = (startZ + endZ) / 2;
@@ -647,6 +823,7 @@ export class HighwayWorld {
       ribs.position.copy(shell.position);
       ribs.rotation.copy(shell.rotation);
       group.add(shell, ribs);
+      this.addTunnelWallDetails(group, startZ, endZ);
       const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.06, 4.5), this.sodiumMaterial, 14);
       const tunnelLightGlows = new THREE.InstancedMesh(
         new THREE.BoxGeometry(.72, .08, 5.6),

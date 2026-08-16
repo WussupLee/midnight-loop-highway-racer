@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_UNIFORM_FILL_INTENSITY } from '../src/game/world';
+import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_CONDUIT_COUNT, TUNNEL_PANEL_SPACING, TUNNEL_UNIFORM_FILL_INTENSITY, TUNNEL_VENT_SPACING, tunnelWallDetailPlan } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -66,6 +66,19 @@ describe('tunnel geometry', () => {
     expect(isTunnelChunkNumber(7)).toBe(true);
     expect(isTunnelChunkNumber(8)).toBe(true);
     expect(isTunnelChunkNumber(9)).toBe(false);
+  });
+
+  it('layers frequent constructed wall panels, vents, conduits, and service boxes', () => {
+    const details = tunnelWallDetailPlan(150);
+    expect(TUNNEL_PANEL_SPACING).toBeLessThanOrEqual(10);
+    expect(TUNNEL_VENT_SPACING).toBeLessThanOrEqual(30);
+    expect(details.panelCountPerSide).toBeGreaterThanOrEqual(15);
+    expect(details.seamCountPerSide).toBe(details.panelCountPerSide + 1);
+    expect(details.ventCountPerSide).toBeGreaterThanOrEqual(5);
+    expect(details.slatsPerVent).toBeGreaterThanOrEqual(5);
+    expect(details.serviceBoxCountPerSide).toBeGreaterThanOrEqual(3);
+    expect(details.conduitCount).toBe(TUNNEL_CONDUIT_COUNT);
+    expect(details.conduitCount).toBeGreaterThanOrEqual(4);
   });
 });
 

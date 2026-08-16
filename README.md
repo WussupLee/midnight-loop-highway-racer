@@ -65,7 +65,7 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 - `src/game/vehicle.ts` — deterministic 120 Hz custom tire, steering, yaw, drivetrain, brake, handbrake, drag, and load-transfer simulation.
 - `src/game/scoring.ts` — pure pass lifecycle, nonlinear scoring, duplicate prevention, and combo logic.
 - `src/game/drift.ts` — pure drift qualification, radius/angle validation, point accumulation, and completion awards.
-- `src/game/world.ts` — restart-safe recycled curved five-lane freeway, shoulders, Jersey barriers, tunnels, overpasses, original green signage, warm lighting, and skyline.
+- `src/game/world.ts` - restart-safe recycled curved five-lane freeway, shoulders, Jersey barriers, constructed tunnels with segmented concrete walls, vents and utility conduits, overpasses, original green signage, warm lighting, and skyline.
 - `src/game/traffic.ts` — bounded 56-vehicle pool, a low-profile traffic mix (compact, coupe, SUV, and pickup, plus rare large trucks), gap-preserving three-car opening waves, safe lane changes, hybrid traffic headlights, and collisions.
 - `src/game/vehicleMeshes.ts` — shared PS2-era faceted loft geometry, low-cost round lamps, and soft additive glow texture generation for underglow and night-visible brake-light halos.
 - `src/game/visuals.ts` — original silver tuner coupe, reference-aligned four-round rear composition, raised wing, compact lower plate, bumper opening, green underglow, broad soft dynamic headlights, chase/hood cameras, and speed effects.

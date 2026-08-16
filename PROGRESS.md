@@ -463,3 +463,11 @@
 - Added device-orientation permission handling, one-tap recalibration, a 2.5-degree steering dead zone, bounded sensitivity, smoothing, vibration feedback, and automatic fallback to Thumb Controls when motion access is denied or unavailable.
 - Pulled the portrait chase camera from 6.4 m to 4.45 m behind the car, lowered it slightly, and reduced the mobile-only FOV envelope to 68-80 degrees. Desktop camera values remain unchanged.
 - Expanded mobile-control tests to cover swipe qualification, rejected downward/short gestures, tilt direction, calibration dead zone, and full steering bounds.
+
+## 2026-08-16 - Constructed tunnel wall detail
+
+- Reworked the tunnel's lower interior from a visually uninterrupted curved shell into repeated tilted concrete panels with visible vertical expansion seams and a continuous structural base plinth.
+- Added recessed ventilation bays with individual louvers, paired electrical conduit runs with regular clamps, horizontal construction joints, and intermittent surface-mounted service cabinets and drops.
+- Kept every new detail low-poly and instanced per tunnel chunk so the added depth remains compatible with the mobile rendering budget.
+- Preserved the established warm ceiling fixtures and continuous blue-green ambient treatment; wall hardware is deliberately non-luminous so it reads through contrast rather than adding unwanted spotlights.
+- TypeScript verification, all 62 automated tests, the production build, and a live local HTTP smoke test pass. Automated screenshot inspection remains pending because the browser-control connection was unavailable in this session.
