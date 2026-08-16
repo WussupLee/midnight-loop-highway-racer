@@ -7,7 +7,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GameAudio } from './game/audio';
-import { createMobileInputState, mobileDriverInput, resetMobileControls, setMobileControl, type MobileControlAction } from './game/mobileControls';
+import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
 import { bankDriftScore, createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
 import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
@@ -106,10 +106,12 @@ const renderScaleSelect = element<HTMLSelectElement>('render-scale');
 const trafficSelect = element<HTMLSelectElement>('traffic-setting');
 const bloomCheckbox = element<HTMLInputElement>('bloom-setting');
 const ditherCheckbox = element<HTMLInputElement>('dither-setting');
+const mobileControlModeSelect = element<HTMLSelectElement>('mobile-control-mode');
 const mobileControls = element<HTMLElement>('mobile-controls');
 const mobilePauseButton = element<HTMLButtonElement>('mobile-pause');
 const mobileCameraButton = element<HTMLButtonElement>('mobile-camera');
 const mobileRecoverButton = element<HTMLButtonElement>('mobile-recover');
+const mobileCalibrateButton = element<HTMLButtonElement>('mobile-calibrate');
 const TOUCH_CAPABLE = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 const MOBILE_DEVICE = TOUCH_CAPABLE && Math.min(screen.width, screen.height) < 900;
 document.documentElement.classList.toggle('touch-capable', TOUCH_CAPABLE);
@@ -401,8 +403,72 @@ let lastImpactKind = 'none';
 let lastImpactSeverity = 0;
 const pressed = new Set<string>();
 const mobileInput = createMobileInputState();
-const mobilePointers = new Map<number, { action: MobileControlAction; button: HTMLButtonElement }>();
+const mobilePointers = new Map<number, { action: MobileControlAction; button: HTMLButtonElement; startY: number; boostSwipe: boolean }>();
+let mobileControlMode: MobileControlMode = 'buttons';
+let tiltGamma: number | null = null;
+let tiltNeutralGamma = 0;
+let tiltSteer = 0;
+let tiltCalibrated = false;
+let tiltPermissionReady = false;
 const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
+
+try {
+  if (localStorage.getItem('midnight-loop-mobile-controls') === 'tilt') mobileControlMode = 'tilt';
+} catch { /* privacy mode */ }
+mobileControlModeSelect.value = mobileControlMode;
+mobileControls.dataset.controlMode = mobileControlMode;
+
+function calibrateTiltSteering(): void {
+  tiltSteer = 0;
+  if (tiltGamma === null) {
+    tiltCalibrated = false;
+    return;
+  }
+  tiltNeutralGamma = tiltGamma;
+  tiltCalibrated = true;
+  navigator.vibrate?.(18);
+}
+
+function applyMobileControlMode(next: MobileControlMode): void {
+  mobileControlMode = next;
+  mobileControlModeSelect.value = next;
+  mobileControls.dataset.controlMode = next;
+  clearMobileInput();
+  tiltSteer = 0;
+  try { localStorage.setItem('midnight-loop-mobile-controls', next); } catch { /* privacy mode */ }
+}
+
+async function enableTiltSteering(): Promise<void> {
+  if (!TOUCH_CAPABLE || mobileControlMode !== 'tilt') return;
+  if (tiltPermissionReady) {
+    calibrateTiltSteering();
+    return;
+  }
+  const orientationApi = window.DeviceOrientationEvent as typeof DeviceOrientationEvent & {
+    requestPermission?: () => Promise<'granted' | 'denied'>;
+  };
+  try {
+    if (typeof orientationApi?.requestPermission === 'function') {
+      const permission = await orientationApi.requestPermission();
+      if (permission !== 'granted') {
+        applyMobileControlMode('buttons');
+        showCallout('TILT ACCESS DENIED', 'THUMB CONTROLS ACTIVE', 1.2);
+        return;
+      }
+    }
+    tiltPermissionReady = true;
+    calibrateTiltSteering();
+  } catch {
+    applyMobileControlMode('buttons');
+    showCallout('TILT UNAVAILABLE', 'THUMB CONTROLS ACTIVE', 1.2);
+  }
+}
+
+window.addEventListener('deviceorientation', (event) => {
+  if (event.gamma === null) return;
+  tiltGamma = event.gamma;
+  if (mobileControlMode === 'tilt' && !tiltCalibrated) calibrateTiltSteering();
+}, { passive: true });
 
 const previousPose = { x: vehicle.x, z: vehicle.z, yaw: vehicle.yaw };
 const renderVehicle: VehicleState = { ...vehicle };
@@ -413,7 +479,7 @@ chaseCamera.reset(vehicle);
 
 function clearMobileInput(): void {
   resetMobileControls(mobileInput);
-  for (const active of mobilePointers.values()) active.button.classList.remove('is-pressed');
+  for (const active of mobilePointers.values()) active.button.classList.remove('is-pressed', 'is-boosting');
   mobilePointers.clear();
 }
 
@@ -432,6 +498,7 @@ function setMode(next: GameMode): void {
 
 function startRun(): void {
   void audio.start();
+  if (mobileControlMode === 'tilt') void enableTiltSteering();
   audio.ui();
   configureRoadRoute(DEBUG ? 20260814 : Math.floor(Math.random() * 2147483646) + 1);
   vehicle = createVehicleState();
@@ -582,6 +649,14 @@ function getInput(): DriverInput {
   const left = pressed.has('KeyA') || pressed.has('ArrowLeft');
   const right = pressed.has('KeyD') || pressed.has('ArrowRight');
   const touch = mobileDriverInput(mobileInput);
+  if (TOUCH_CAPABLE && mobileControlMode === 'tilt') {
+    const targetSteer = tiltGamma !== null && tiltCalibrated
+      ? tiltGammaToDriverSteer(tiltGamma, tiltNeutralGamma)
+      : 0;
+    tiltSteer += (targetSteer - tiltSteer) * .075;
+    touch.steer = tiltSteer;
+    touch.throttle = touch.brake > 0 ? 0 : 1;
+  }
   return {
     throttle: Math.max(throttle, touch.throttle),
     brake: Math.max(brake, touch.brake),
@@ -1145,16 +1220,30 @@ for (const button of mobileControls.querySelectorAll<HTMLButtonElement>('[data-m
     const actionStillHeld = [...mobilePointers.values()].some((pointer) => pointer.action === active.action);
     const buttonStillHeld = [...mobilePointers.values()].some((pointer) => pointer.button === active.button);
     setMobileControl(mobileInput, active.action, actionStillHeld);
+    const boostStillHeld = [...mobilePointers.values()].some((pointer) => pointer.action === 'boost' || pointer.boostSwipe);
+    setMobileControl(mobileInput, 'boost', boostStillHeld);
     if (!buttonStillHeld) active.button.classList.remove('is-pressed');
+    if (![...mobilePointers.values()].some((pointer) => pointer.button === active.button && pointer.boostSwipe)) {
+      active.button.classList.remove('is-boosting');
+    }
   };
   button.addEventListener('pointerdown', (event) => {
     if (!TOUCH_CAPABLE || mode !== 'running') return;
     event.preventDefault();
     button.setPointerCapture(event.pointerId);
-    mobilePointers.set(event.pointerId, { action, button });
+    mobilePointers.set(event.pointerId, { action, button, startY: event.clientY, boostSwipe: false });
     setMobileControl(mobileInput, action, true);
     button.classList.add('is-pressed');
     if (action === 'boost') navigator.vibrate?.(12);
+  });
+  button.addEventListener('pointermove', (event) => {
+    const active = mobilePointers.get(event.pointerId);
+    if (!active || active.action !== 'throttle' || active.boostSwipe) return;
+    if (!isBoostSwipe(active.startY, event.clientY)) return;
+    active.boostSwipe = true;
+    setMobileControl(mobileInput, 'boost', true);
+    button.classList.add('is-boosting');
+    navigator.vibrate?.([18, 22, 28]);
   });
   button.addEventListener('pointerup', (event) => release(event.pointerId));
   button.addEventListener('pointercancel', (event) => release(event.pointerId));
@@ -1164,6 +1253,16 @@ for (const button of mobileControls.querySelectorAll<HTMLButtonElement>('[data-m
 mobilePauseButton.addEventListener('click', () => { if (mode === 'running') togglePause(); });
 mobileCameraButton.addEventListener('click', () => { if (mode === 'running') toggleCamera(); });
 mobileRecoverButton.addEventListener('click', recoverCurrentVehicle);
+mobileCalibrateButton.addEventListener('click', () => {
+  if (mobileControlMode !== 'tilt') return;
+  if (!tiltPermissionReady) void enableTiltSteering();
+  else calibrateTiltSteering();
+  showCallout('TILT CENTERED', '', .7);
+});
+mobileControlModeSelect.addEventListener('change', () => {
+  applyMobileControlMode(mobileControlModeSelect.value === 'tilt' ? 'tilt' : 'buttons');
+  if (mobileControlMode === 'tilt') void enableTiltSteering();
+});
 
 startButton.addEventListener('click', startRun);
 resumeButton.addEventListener('click', togglePause);

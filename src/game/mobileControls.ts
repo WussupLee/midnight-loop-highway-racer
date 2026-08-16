@@ -1,6 +1,7 @@
 import { digitalSteer, type DriverInput } from './vehicle';
 
 export type MobileControlAction = 'left' | 'right' | 'throttle' | 'brake' | 'handbrake' | 'boost';
+export type MobileControlMode = 'buttons' | 'tilt';
 
 export interface MobileInputState {
   active: Set<MobileControlAction>;
@@ -17,6 +18,20 @@ export function setMobileControl(state: MobileInputState, action: MobileControlA
 
 export function resetMobileControls(state: MobileInputState): void {
   state.active.clear();
+}
+
+export function isBoostSwipe(startY: number, currentY: number, minimumTravel = 42): boolean {
+  return startY - currentY >= minimumTravel;
+}
+
+export function tiltGammaToDriverSteer(gamma: number, neutralGamma: number, deadZone = 2.5, fullTilt = 19): number {
+  const delta = gamma - neutralGamma;
+  const magnitude = Math.abs(delta);
+  if (magnitude <= deadZone) return 0;
+  const normalized = Math.min(1, (magnitude - deadZone) / Math.max(1, fullTilt - deadZone));
+  // DeviceOrientation gamma is positive when the phone tilts right, while the
+  // vehicle model uses negative steering for the visible right-hand direction.
+  return -Math.sign(delta) * normalized;
 }
 
 export function mobileDriverInput(state: MobileInputState): DriverInput {

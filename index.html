@@ -40,8 +40,9 @@
               <kbd>M</kbd><span>Mute</span>
             </div>
             <div class="mobile-controls-guide">
-              <b>TOUCH</b><span>Steer with the left arrows. Hold the right pedals for throttle and brake. DRIFT is the handbrake; N2O spends boost.</span>
+              <b>TOUCH</b><span>Thumb mode uses steering arrows and pedals; swipe upward from GAS to trigger N2O. Tilt mode auto-accelerates and uses the three bottom action pads.</span>
             </div>
+            <label class="mobile-control-setting">Mobile steering <select id="mobile-control-mode"><option value="buttons">Thumb controls</option><option value="tilt">Tilt steering</option></select></label>
           </details>
           <details>
             <summary>VIDEO SETTINGS</summary>
@@ -92,27 +93,34 @@
 
       <div id="crash-blackout" class="crash-blackout" aria-hidden="true"></div>
 
-      <nav id="mobile-controls" class="mobile-controls" aria-label="Mobile driving controls" aria-hidden="true">
+      <nav id="mobile-controls" class="mobile-controls" data-control-mode="buttons" aria-label="Mobile driving controls" aria-hidden="true">
         <div class="mobile-secondary-controls">
           <button id="mobile-pause" class="mobile-secondary" type="button" aria-label="Pause game">II</button>
           <button id="mobile-camera" class="mobile-secondary" type="button" aria-label="Switch camera">CAM</button>
           <button id="mobile-recover" class="mobile-secondary" type="button" aria-label="Recover vehicle">REC</button>
+          <button id="mobile-calibrate" class="mobile-secondary mobile-tilt-only" type="button" aria-label="Calibrate tilt steering">CAL</button>
         </div>
-        <div class="mobile-steering" aria-label="Steering and drift controls">
+        <div class="mobile-steering mobile-buttons-only" aria-label="Steering and drift controls">
           <button class="mobile-drift" type="button" data-mobile-control="handbrake" aria-label="Hold handbrake to drift"><span>DRIFT</span><i>HB</i></button>
           <div class="mobile-arrow-row">
             <button class="mobile-arrow mobile-left" type="button" data-mobile-control="left" aria-label="Steer left"><i></i></button>
             <button class="mobile-arrow mobile-right" type="button" data-mobile-control="right" aria-label="Steer right"><i></i></button>
           </div>
         </div>
-        <div class="mobile-pedals" aria-label="Throttle brake and nitrous controls">
-          <button class="mobile-nitro" type="button" data-mobile-control="boost" aria-label="Hold for nitrous boost"><b>N2O</b><span>BOOST</span></button>
+        <div class="mobile-pedals mobile-buttons-only" aria-label="Throttle brake and nitrous controls">
           <button class="mobile-pedal mobile-brake" type="button" data-mobile-control="brake" aria-label="Hold brake pedal">
             <i><b></b><b></b><b></b><b></b></i><span>BRAKE</span>
           </button>
-          <button class="mobile-pedal mobile-throttle" type="button" data-mobile-control="throttle" aria-label="Hold accelerator pedal">
+          <button class="mobile-pedal mobile-throttle" type="button" data-mobile-control="throttle" data-mobile-boost-swipe aria-label="Hold accelerator; swipe upward for nitrous boost">
+            <em class="mobile-swipe-hint"><b>&uarr;</b> SWIPE N2O</em>
             <i><b></b><b></b><b></b><b></b><b></b></i><span>GAS</span>
           </button>
+        </div>
+        <div class="mobile-tilt-indicator mobile-tilt-only" aria-hidden="true"><i></i><span>TILT TO STEER // AUTO THROTTLE</span></div>
+        <div class="mobile-tilt-actions mobile-tilt-only" aria-label="Tilt driving actions">
+          <button class="mobile-tilt-action mobile-tilt-nitro" type="button" data-mobile-control="boost" aria-label="Hold nitrous boost"><b>N2O</b><span>BOOST</span></button>
+          <button class="mobile-tilt-action mobile-tilt-drift" type="button" data-mobile-control="handbrake" aria-label="Hold handbrake to drift"><b>HB</b><span>DRIFT</span></button>
+          <button class="mobile-tilt-action mobile-tilt-brake" type="button" data-mobile-control="brake" aria-label="Hold service brake"><b>BRK</b><span>BRAKE</span></button>
         </div>
       </nav>
 

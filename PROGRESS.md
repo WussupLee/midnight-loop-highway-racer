@@ -455,3 +455,11 @@
 - Added portrait-specific chase framing, a conservative speed-based FOV range, disabled mobile MSAA, and capped portrait render pixel density to reduce phone GPU load while retaining the dense traffic presentation.
 - Added automated coverage for simultaneous multi-touch input, brake/handbrake separation, opposing steering, and input reset behavior.
 - TypeScript verification, all 59 automated tests, production bundling, and a live local HTTP smoke test pass. Automated phone screenshot control was unavailable in this session, so final physical-device thumb reach and sustained mobile FPS remain a hands-on validation item.
+
+## 2026-08-16 - Swipe boost, optional tilt steering, and closer mobile camera
+
+- Replaced the separate thumb-mode N2O button with an accelerator gesture: hold GAS and swipe upward at least 42 px to engage boost without losing throttle or the player's other simultaneous touches.
+- Added an optional persisted Tilt Steering mode in the mobile Driver Controls menu. It auto-accelerates and presents dedicated bottom-left N2O, bottom-center handbrake, and bottom-right service-brake pads.
+- Added device-orientation permission handling, one-tap recalibration, a 2.5-degree steering dead zone, bounded sensitivity, smoothing, vibration feedback, and automatic fallback to Thumb Controls when motion access is denied or unavailable.
+- Pulled the portrait chase camera from 6.4 m to 4.45 m behind the car, lowered it slightly, and reduced the mobile-only FOV envelope to 68-80 degrees. Desktop camera values remain unchanged.
+- Expanded mobile-control tests to cover swipe qualification, rejected downward/short gestures, tilt direction, calibration dead zone, and full steering bounds.

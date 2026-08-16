@@ -512,8 +512,8 @@ export class ChaseCamera {
       this.position.set(state.x, roadCenterY(state.z) + 1.34, state.z).addScaledVector(forward, 2.56);
       this.look.set(state.x, roadCenterY(state.z) + 1.05, state.z).addScaledVector(forward, 29);
     } else {
-      const distance = this.portraitLayout ? -6.4 : -4.35;
-      const height = this.portraitLayout ? 2.72 : 2.34;
+      const distance = this.portraitLayout ? -4.45 : -4.35;
+      const height = this.portraitLayout ? 2.43 : 2.34;
       this.position.set(state.x, roadCenterY(state.z) + height, state.z).addScaledVector(forward, distance);
       this.look.set(state.x, roadCenterY(state.z) + .78, state.z).addScaledVector(forward, 12);
     }
@@ -538,8 +538,8 @@ export class ChaseCamera {
     const accelerationPullback = Math.min(.55, Math.max(-.24, state.lastLongAccel * .055));
     const desired = this.mode === 'hood'
       ? new THREE.Vector3(state.x, roadCenterY(state.z) + 1.34, state.z).addScaledVector(forward, 2.56)
-      : new THREE.Vector3(state.x, roadCenterY(state.z) + (this.portraitLayout ? 2.7 : 2.32) + highSpeed * .14, state.z)
-        .addScaledVector(forward, (this.portraitLayout ? -6.4 : -4.35) - accelerationPullback * .4)
+      : new THREE.Vector3(state.x, roadCenterY(state.z) + (this.portraitLayout ? 2.41 : 2.32) + highSpeed * .14, state.z)
+        .addScaledVector(forward, (this.portraitLayout ? -4.45 : -4.35) - accelerationPullback * .4)
         .addScaledVector(right, -state.steering * .055);
     const lookDesired = new THREE.Vector3(state.x, roadCenterY(state.z) + (this.mode === 'hood' ? 1.05 : .76), state.z)
       .addScaledVector(forward, this.mode === 'hood' ? 29 : 12.5 + highSpeed * 3.4)
@@ -562,8 +562,8 @@ export class ChaseCamera {
     this.camera.position.y += Math.sin(this.phase * 2.31) * (highSpeedVibration * .55 + impact * .6);
     this.camera.position.z += Math.cos(this.phase * 1.3) * impact * .35;
     this.camera.lookAt(this.look);
-    const targetFov = (this.portraitLayout ? 72 : CHASE_FOV_BASE)
-      + fovSpeed * (this.portraitLayout ? 14 : CHASE_FOV_SPEED_GAIN)
+    const targetFov = (this.portraitLayout ? 68 : CHASE_FOV_BASE)
+      + fovSpeed * (this.portraitLayout ? 12 : CHASE_FOV_SPEED_GAIN)
       + (state.boostActive ? 1.2 : 0) - Math.min(1.6, state.brake * 1.6);
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 2.25);
     this.camera.updateProjectionMatrix();

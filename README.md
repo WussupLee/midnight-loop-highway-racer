@@ -44,7 +44,9 @@ npm run preview
 
 ### Mobile controls
 
-Phones and touch-capable tablets automatically receive a portrait cockpit layout. Use the large left/right thumb buttons to steer. The right thumb has separate accelerator and brake pedals plus a N2O button; the DRIFT button above steering is the handbrake. All controls support simultaneous touches, so you can steer while accelerating, brake while changing direction, or hold boost with the accelerator. Small top controls switch the camera, pause, and recover the car. Device tilt is deliberately not the default: fixed thumb controls are more predictable for the game's close-traffic precision driving and work without motion-permission prompts.
+Phones and touch-capable tablets automatically receive a close portrait cockpit layout. In the default Thumb Controls mode, use the large left/right buttons to steer and hold the right-side GAS or BRAKE pedal. Swipe upward from the GAS pedal without lifting that thumb to engage N2O while continuing to accelerate; DRIFT remains the separate handbrake. All controls support simultaneous touches. Small top controls switch the camera, pause, and recover the car.
+
+The Driver Controls menu also offers Tilt Steering. This mode auto-accelerates, maps calibrated phone roll to smoothed steering with a center dead zone, and replaces the pedal layout with three large bottom actions: N2O at left, handbrake at center, and service brake at right. `CAL` recenters the current phone angle. iPhone/iPad may display the standard motion-access prompt when Tilt Steering is selected; denied or unavailable motion access returns the game to Thumb Controls.
 
 Steering is speed-sensitive and smoothed for keyboard play. Normal high-speed steering uses a front-axle-led, tightly controlled yaw envelope with additional rear stabilization during rapid left-right transitions; its tuned lateral response is quick enough for dense-traffic lane changes. Service braking adds straight-line lateral and yaw stabilization; it does not release rear grip. The handbrake is deliberately separate: it releases rear grip quickly, opens the wider drift envelope, and enables drift scoring. A stronger mid-speed torque recovery makes brake-and-pass moves responsive while preserving the simulated gearbox and tire-force limits.
 
@@ -92,6 +94,7 @@ Open `http://127.0.0.1:4175/?debug=1` while the dedicated preview is running. Th
 ## Known limitations
 
 - Mobile touch controls are tuned for portrait phones; landscape phone and tablet layouts remain usable but do not receive the same bespoke camera framing.
+- Tilt sensitivity is calibrated for portrait phone play and depends on the quality/rate of the device orientation sensors.
 - Gamepad input is not implemented.
 - Vehicle and traffic models use original runtime-built faceted shells rather than authored high-detail or licensed meshes.
 - Automotive effects are synthesized at runtime, so they are intentionally more stylized than recorded vehicle audio.
