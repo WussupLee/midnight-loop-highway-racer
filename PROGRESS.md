@@ -458,7 +458,7 @@
 
 ## 2026-08-16 - Swipe boost, optional tilt steering, and closer mobile camera
 
-- Replaced the separate thumb-mode N2O button with an accelerator gesture: hold GAS and swipe upward at least 42 px to engage boost without losing throttle or the player's other simultaneous touches.
+- Replaced the separate thumb-mode N2O button with an accelerator gesture: swipe upward at least 42 px from GAS to trigger a 0.9-second minimum boost burst without losing the player's other simultaneous touches; continuing to hold sustains boost while charge remains.
 - Added an optional persisted Tilt Steering mode in the mobile Driver Controls menu. It auto-accelerates and presents dedicated bottom-left N2O, bottom-center handbrake, and bottom-right service-brake pads.
 - Added device-orientation permission handling, one-tap recalibration, a 2.5-degree steering dead zone, bounded sensitivity, smoothing, vibration feedback, and automatic fallback to Thumb Controls when motion access is denied or unavailable.
 - Pulled the portrait chase camera from 6.4 m to 4.45 m behind the car, lowered it slightly, and reduced the mobile-only FOV envelope to 68-80 degrees. Desktop camera values remain unchanged.

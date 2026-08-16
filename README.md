@@ -44,7 +44,7 @@ npm run preview
 
 ### Mobile controls
 
-Phones and touch-capable tablets automatically receive a close portrait cockpit layout. In the default Thumb Controls mode, use the large left/right buttons to steer and hold the right-side GAS or BRAKE pedal. Swipe upward from the GAS pedal without lifting that thumb to engage N2O while continuing to accelerate; DRIFT remains the separate handbrake. All controls support simultaneous touches. Small top controls switch the camera, pause, and recover the car.
+Phones and touch-capable tablets automatically receive a close portrait cockpit layout. In the default Thumb Controls mode, use the large left/right buttons to steer and hold the right-side GAS or BRAKE pedal. Swipe upward from the GAS pedal to trigger a short N2O burst; holding the finger after the swipe sustains boost while charge remains. DRIFT remains the separate handbrake. All controls support simultaneous touches. Small top controls switch the camera, pause, and recover the car.
 
 The Driver Controls menu also offers Tilt Steering. This mode auto-accelerates, maps calibrated phone roll to smoothed steering with a center dead zone, and replaces the pedal layout with three large bottom actions: N2O at left, handbrake at center, and service brake at right. `CAL` recenters the current phone angle. iPhone/iPad may display the standard motion-access prompt when Tilt Steering is selected; denied or unavailable motion access returns the game to Thumb Controls.
 

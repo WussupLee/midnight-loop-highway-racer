@@ -410,6 +410,7 @@ let tiltNeutralGamma = 0;
 let tiltSteer = 0;
 let tiltCalibrated = false;
 let tiltPermissionReady = false;
+let mobileSwipeBoostUntil = 0;
 const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
 
 try {
@@ -479,6 +480,7 @@ chaseCamera.reset(vehicle);
 
 function clearMobileInput(): void {
   resetMobileControls(mobileInput);
+  mobileSwipeBoostUntil = 0;
   for (const active of mobilePointers.values()) active.button.classList.remove('is-pressed', 'is-boosting');
   mobilePointers.clear();
 }
@@ -662,7 +664,7 @@ function getInput(): DriverInput {
     brake: Math.max(brake, touch.brake),
     steer: touch.steer !== 0 ? touch.steer : digitalSteer(left, right),
     handbrake: pressed.has('Space') || touch.handbrake,
-    boost: pressed.has('ShiftLeft') || pressed.has('ShiftRight') || touch.boost,
+    boost: pressed.has('ShiftLeft') || pressed.has('ShiftRight') || touch.boost || runClock < mobileSwipeBoostUntil,
   };
 }
 
@@ -1241,6 +1243,7 @@ for (const button of mobileControls.querySelectorAll<HTMLButtonElement>('[data-m
     if (!active || active.action !== 'throttle' || active.boostSwipe) return;
     if (!isBoostSwipe(active.startY, event.clientY)) return;
     active.boostSwipe = true;
+    mobileSwipeBoostUntil = Math.max(mobileSwipeBoostUntil, runClock + .9);
     setMobileControl(mobileInput, 'boost', true);
     button.classList.add('is-boosting');
     navigator.vibrate?.([18, 22, 28]);
