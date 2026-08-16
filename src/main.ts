@@ -7,7 +7,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GameAudio } from './game/audio';
-import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
+import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, steeringActionForPointerX, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
 import { bankDriftScore, createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
 import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
@@ -115,6 +115,7 @@ const mobileCalibrateButton = element<HTMLButtonElement>('mobile-calibrate');
 const TOUCH_CAPABLE = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 const MOBILE_DEVICE = TOUCH_CAPABLE && Math.min(screen.width, screen.height) < 900;
 document.documentElement.classList.toggle('touch-capable', TOUCH_CAPABLE);
+document.documentElement.classList.toggle('heavy-dither', ditherCheckbox.checked);
 
 function formatScore(value: number): string {
   return Math.max(0, Math.round(value)).toString().padStart(6, '0').replace(/(\d)(?=(\d{3})+$)/g, '$1 ');
@@ -1240,7 +1241,28 @@ for (const button of mobileControls.querySelectorAll<HTMLButtonElement>('[data-m
   });
   button.addEventListener('pointermove', (event) => {
     const active = mobilePointers.get(event.pointerId);
-    if (!active || active.action !== 'throttle' || active.boostSwipe) return;
+    if (!active) return;
+    if (active.action === 'left' || active.action === 'right') {
+      const steeringRow = button.closest<HTMLElement>('.mobile-arrow-row');
+      if (!steeringRow) return;
+      const bounds = steeringRow.getBoundingClientRect();
+      const nextAction = steeringActionForPointerX(event.clientX, bounds.left, bounds.width);
+      if (nextAction === active.action) return;
+      const previousAction = active.action;
+      const previousButton = active.button;
+      const nextButton = steeringRow.querySelector<HTMLButtonElement>(`[data-mobile-control="${nextAction}"]`);
+      if (!nextButton) return;
+      active.action = nextAction;
+      active.button = nextButton;
+      const previousStillHeld = [...mobilePointers.values()].some((pointer) => pointer.action === previousAction);
+      const previousButtonStillHeld = [...mobilePointers.values()].some((pointer) => pointer.button === previousButton);
+      setMobileControl(mobileInput, previousAction, previousStillHeld);
+      setMobileControl(mobileInput, nextAction, true);
+      if (!previousButtonStillHeld) previousButton.classList.remove('is-pressed');
+      nextButton.classList.add('is-pressed');
+      return;
+    }
+    if (active.action !== 'throttle' || active.boostSwipe) return;
     if (!isBoostSwipe(active.startY, event.clientY)) return;
     active.boostSwipe = true;
     mobileSwipeBoostUntil = Math.max(mobileSwipeBoostUntil, runClock + .9);
@@ -1265,6 +1287,9 @@ mobileCalibrateButton.addEventListener('click', () => {
 mobileControlModeSelect.addEventListener('change', () => {
   applyMobileControlMode(mobileControlModeSelect.value === 'tilt' ? 'tilt' : 'buttons');
   if (mobileControlMode === 'tilt') void enableTiltSteering();
+});
+ditherCheckbox.addEventListener('change', () => {
+  document.documentElement.classList.toggle('heavy-dither', ditherCheckbox.checked);
 });
 
 startButton.addEventListener('click', startRun);

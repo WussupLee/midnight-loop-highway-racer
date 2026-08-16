@@ -44,7 +44,7 @@ npm run preview
 
 ### Mobile controls
 
-Phones and touch-capable tablets automatically receive a close portrait cockpit layout. In the default Thumb Controls mode, use the large left/right buttons to steer and hold the right-side GAS or BRAKE pedal. Swipe upward from the GAS pedal to trigger a short N2O burst; holding the finger after the swipe sustains boost while charge remains. DRIFT remains the separate handbrake. All controls support simultaneous touches. Small top controls switch the camera, pause, and recover the car.
+Phones and touch-capable tablets automatically receive a close portrait cockpit layout. In the default Thumb Controls mode, slide one finger continuously across the large left/right steering zone without lifting. The right side groups the outlined BRAKE and GAS pedals with a dedicated handbrake lever directly above GAS. Swipe upward from GAS to trigger a short N2O burst; holding after the swipe sustains boost while charge remains. All controls support simultaneous touches. Small top controls switch the camera, pause, and recover the car.
 
 The Driver Controls menu also offers Tilt Steering. This mode auto-accelerates, maps calibrated phone roll to smoothed steering with a center dead zone, and replaces the pedal layout with three large bottom actions: N2O at left, handbrake at center, and service brake at right. `CAL` recenters the current phone angle. iPhone/iPad may display the standard motion-access prompt when Tilt Steering is selected; denied or unavailable motion access returns the game to Thumb Controls.
 
@@ -61,7 +61,7 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 ## Architecture
 
 - `src/main.ts` - fixed-step loop, keyboard/multi-touch input, run flow, Rapier synchronization, scoring orchestration, HUD, crash cut, and debug bridge.
-- `src/game/mobileControls.ts` - pure multi-touch action state and conversion into the shared driver input model.
+- `src/game/mobileControls.ts` - pure multi-touch action state, continuous steering-zone direction selection, and conversion into the shared driver input model.
 - `src/game/vehicle.ts` — deterministic 120 Hz custom tire, steering, yaw, drivetrain, brake, handbrake, drag, and load-transfer simulation.
 - `src/game/scoring.ts` — pure pass lifecycle, nonlinear scoring, duplicate prevention, and combo logic.
 - `src/game/drift.ts` — pure drift qualification, radius/angle validation, point accumulation, and completion awards.

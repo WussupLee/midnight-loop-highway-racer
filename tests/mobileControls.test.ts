@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, tiltGammaToDriverSteer } from '../src/game/mobileControls';
+import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, steeringActionForPointerX, tiltGammaToDriverSteer } from '../src/game/mobileControls';
 
 describe('mobile driving controls', () => {
   it('supports simultaneous steering, throttle, and boost', () => {
@@ -33,6 +33,13 @@ describe('mobile driving controls', () => {
     expect(isBoostSwipe(700, 674)).toBe(false);
     expect(isBoostSwipe(700, 656)).toBe(true);
     expect(isBoostSwipe(500, 560)).toBe(false);
+  });
+
+  it('changes steering direction across one shared touch zone without lifting', () => {
+    expect(steeringActionForPointerX(25, 10, 160)).toBe('left');
+    expect(steeringActionForPointerX(89, 10, 160)).toBe('left');
+    expect(steeringActionForPointerX(90, 10, 160)).toBe('right');
+    expect(steeringActionForPointerX(164, 10, 160)).toBe('right');
   });
 
   it('maps calibrated phone tilt into the vehicle steering convention with a dead zone', () => {

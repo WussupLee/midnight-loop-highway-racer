@@ -24,6 +24,10 @@ export function isBoostSwipe(startY: number, currentY: number, minimumTravel = 4
   return startY - currentY >= minimumTravel;
 }
 
+export function steeringActionForPointerX(pointerX: number, regionLeft: number, regionWidth: number): 'left' | 'right' {
+  return pointerX < regionLeft + regionWidth * .5 ? 'left' : 'right';
+}
+
 export function tiltGammaToDriverSteer(gamma: number, neutralGamma: number, deadZone = 2.5, fullTilt = 19): number {
   const delta = gamma - neutralGamma;
   const magnitude = Math.abs(delta);

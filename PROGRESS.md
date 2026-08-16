@@ -471,3 +471,11 @@
 - Kept every new detail low-poly and instanced per tunnel chunk so the added depth remains compatible with the mobile rendering budget.
 - Preserved the established warm ceiling fixtures and continuous blue-green ambient treatment; wall hardware is deliberately non-luminous so it reads through contrast rather than adding unwanted spotlights.
 - TypeScript verification, all 62 automated tests, the production build, and a live local HTTP smoke test pass. Automated screenshot inspection remains pending because the browser-control connection was unavailable in this session.
+
+## 2026-08-16 - Mobile handbrake and continuous steering redesign
+
+- Moved the thumb-mode handbrake from the left steering cluster to the right control stack directly above GAS, and replaced its text pad with a recognizable animated handbrake-lever silhouette.
+- Converted the paired steering arrows into one continuous drag zone: a held finger can cross the midpoint to reverse steering direction without lifting or interrupting other simultaneous controls.
+- Replaced the colored glass-style mobile controls with restrained thin white outlines, transparent faces, monochrome pedal ribs, and simple pressed-state feedback.
+- Moved the ordered dither overlay above every interface layer so its texture now covers the world, HUD, menus, touch controls, loading state, and crash presentation consistently.
+- TypeScript verification, all 63 automated tests, and the production build pass.

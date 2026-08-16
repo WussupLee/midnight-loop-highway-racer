@@ -40,7 +40,7 @@
               <kbd>M</kbd><span>Mute</span>
             </div>
             <div class="mobile-controls-guide">
-              <b>TOUCH</b><span>Thumb mode uses steering arrows and pedals; swipe upward from GAS to trigger N2O. Tilt mode auto-accelerates and uses the three bottom action pads.</span>
+              <b>TOUCH</b><span>Slide across the left arrows to steer without lifting. The right hand controls GAS, BRAKE, and the handbrake lever; swipe upward from GAS for N2O. Tilt mode auto-accelerates.</span>
             </div>
             <label class="mobile-control-setting">Mobile steering <select id="mobile-control-mode"><option value="buttons">Thumb controls</option><option value="tilt">Tilt steering</option></select></label>
           </details>
@@ -100,16 +100,18 @@
           <button id="mobile-recover" class="mobile-secondary" type="button" aria-label="Recover vehicle">REC</button>
           <button id="mobile-calibrate" class="mobile-secondary mobile-tilt-only" type="button" aria-label="Calibrate tilt steering">CAL</button>
         </div>
-        <div class="mobile-steering mobile-buttons-only" aria-label="Steering and drift controls">
-          <button class="mobile-drift" type="button" data-mobile-control="handbrake" aria-label="Hold handbrake to drift"><span>DRIFT</span><i>HB</i></button>
+        <div class="mobile-steering mobile-buttons-only" aria-label="Continuous slide steering controls">
           <div class="mobile-arrow-row">
             <button class="mobile-arrow mobile-left" type="button" data-mobile-control="left" aria-label="Steer left"><i></i></button>
             <button class="mobile-arrow mobile-right" type="button" data-mobile-control="right" aria-label="Steer right"><i></i></button>
           </div>
         </div>
-        <div class="mobile-pedals mobile-buttons-only" aria-label="Throttle brake and nitrous controls">
+        <div class="mobile-pedals mobile-buttons-only" aria-label="Throttle brake handbrake and nitrous controls">
           <button class="mobile-pedal mobile-brake" type="button" data-mobile-control="brake" aria-label="Hold brake pedal">
             <i><b></b><b></b><b></b><b></b></i><span>BRAKE</span>
+          </button>
+          <button class="mobile-handbrake" type="button" data-mobile-control="handbrake" aria-label="Pull handbrake to drift">
+            <i><b></b></i><span>HANDBRAKE</span>
           </button>
           <button class="mobile-pedal mobile-throttle" type="button" data-mobile-control="throttle" data-mobile-boost-swipe aria-label="Hold accelerator; swipe upward for nitrous boost">
             <em class="mobile-swipe-hint"><b>&uarr;</b> SWIPE N2O</em>
