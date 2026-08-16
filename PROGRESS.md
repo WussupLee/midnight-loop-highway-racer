@@ -438,10 +438,20 @@
 - Debug runs retain a stable seed for reproducible automated browser scenarios.
 - TypeScript verification, all 56 automated tests, and the production build pass. In-app visual validation remains pending because browser control was unavailable in this task session.
 
-## 2026-08-14 — Even tunnel illumination
+## 2026-08-14 - Even tunnel illumination
 
 - Removed the discrete cyan wall bars, their glow boxes, and the repeated cyan point lights that produced bright pools along the tunnel's left, right, and center.
 - Preserved the warm orange ceiling fixtures as visible overhead elements without using them to create localized road spotlights.
 - Added a brighter uniform blue-green tunnel ambient response for vehicles plus dedicated cyan-emissive asphalt and curved concrete materials, producing continuous illumination without visible hotspots.
 - Prevented randomized highway bends from crossing tunnel chunks so the straight tunnel shell, road, traffic, and barriers remain geometrically aligned.
 - TypeScript verification, all 56 automated tests, and the production build pass.
+
+## 2026-08-16 - Portrait mobile controls and responsive cockpit
+
+- Added a dedicated multi-touch input layer that feeds the same force-based vehicle simulation as keyboard play; steering, throttle, brake, handbrake, and boost can be held in combinations without synthetic key events.
+- Built large bottom-left steering arrows and DRIFT handbrake controls, plus bottom-right accelerator/brake pedal shapes and a separate N2O control with clear pressed feedback.
+- Added compact touch controls for pause, chase/hood camera switching, and vehicle recovery so a complete run does not require a keyboard.
+- Added safe-area-aware portrait layout rules for notched phones, a vertically responsive title/settings screen, compact HUD/gauges, readable score/combo placement, and touch-scrollable menus.
+- Added portrait-specific chase framing, a conservative speed-based FOV range, disabled mobile MSAA, and capped portrait render pixel density to reduce phone GPU load while retaining the dense traffic presentation.
+- Added automated coverage for simultaneous multi-touch input, brake/handbrake separation, opposing steering, and input reset behavior.
+- TypeScript verification, all 59 automated tests, production bundling, and a live local HTTP smoke test pass. Automated phone screenshot control was unavailable in this session, so final physical-device thumb reach and sustained mobile FPS remain a hands-on validation item.

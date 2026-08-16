@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#080806" />
     <meta name="description" content="MIDNIGHT LOOP - an original early-2000s highway score-attack racer." />
     <title>MIDNIGHT LOOP</title>
@@ -38,6 +38,9 @@
               <kbd>SHIFT</kbd><span>Boost</span><kbd>C</kbd><span>Switch camera</span>
               <kbd>R</kbd><span>Recover</span><kbd>ESC</kbd><span>Pause</span>
               <kbd>M</kbd><span>Mute</span>
+            </div>
+            <div class="mobile-controls-guide">
+              <b>TOUCH</b><span>Steer with the left arrows. Hold the right pedals for throttle and brake. DRIFT is the handbrake; N2O spends boost.</span>
             </div>
           </details>
           <details>
@@ -88,6 +91,30 @@
       </section>
 
       <div id="crash-blackout" class="crash-blackout" aria-hidden="true"></div>
+
+      <nav id="mobile-controls" class="mobile-controls" aria-label="Mobile driving controls" aria-hidden="true">
+        <div class="mobile-secondary-controls">
+          <button id="mobile-pause" class="mobile-secondary" type="button" aria-label="Pause game">II</button>
+          <button id="mobile-camera" class="mobile-secondary" type="button" aria-label="Switch camera">CAM</button>
+          <button id="mobile-recover" class="mobile-secondary" type="button" aria-label="Recover vehicle">REC</button>
+        </div>
+        <div class="mobile-steering" aria-label="Steering and drift controls">
+          <button class="mobile-drift" type="button" data-mobile-control="handbrake" aria-label="Hold handbrake to drift"><span>DRIFT</span><i>HB</i></button>
+          <div class="mobile-arrow-row">
+            <button class="mobile-arrow mobile-left" type="button" data-mobile-control="left" aria-label="Steer left"><i></i></button>
+            <button class="mobile-arrow mobile-right" type="button" data-mobile-control="right" aria-label="Steer right"><i></i></button>
+          </div>
+        </div>
+        <div class="mobile-pedals" aria-label="Throttle brake and nitrous controls">
+          <button class="mobile-nitro" type="button" data-mobile-control="boost" aria-label="Hold for nitrous boost"><b>N2O</b><span>BOOST</span></button>
+          <button class="mobile-pedal mobile-brake" type="button" data-mobile-control="brake" aria-label="Hold brake pedal">
+            <i><b></b><b></b><b></b><b></b></i><span>BRAKE</span>
+          </button>
+          <button class="mobile-pedal mobile-throttle" type="button" data-mobile-control="throttle" aria-label="Hold accelerator pedal">
+            <i><b></b><b></b><b></b><b></b><b></b></i><span>GAS</span>
+          </button>
+        </div>
+      </nav>
 
       <section id="pause" class="screen overlay-screen hidden">
         <div class="glass-panel compact-panel">

@@ -8,7 +8,7 @@ MIDNIGHT LOOP is an original browser-based 3D highway score-attack racer. It com
 
 ## Start the game
 
-Requirements: Node.js 22 or newer and desktop Chrome.
+Requirements for local development: Node.js 22 or newer and desktop Chrome. The published game also supports modern touch-capable Chrome and Safari browsers in portrait orientation.
 
 ```bash
 npm install
@@ -42,6 +42,10 @@ npm run preview
 | Escape | Pause / resume |
 | M | Mute / unmute |
 
+### Mobile controls
+
+Phones and touch-capable tablets automatically receive a portrait cockpit layout. Use the large left/right thumb buttons to steer. The right thumb has separate accelerator and brake pedals plus a N2O button; the DRIFT button above steering is the handbrake. All controls support simultaneous touches, so you can steer while accelerating, brake while changing direction, or hold boost with the accelerator. Small top controls switch the camera, pause, and recover the car. Device tilt is deliberately not the default: fixed thumb controls are more predictable for the game's close-traffic precision driving and work without motion-permission prompts.
+
 Steering is speed-sensitive and smoothed for keyboard play. Normal high-speed steering uses a front-axle-led, tightly controlled yaw envelope with additional rear stabilization during rapid left-right transitions; its tuned lateral response is quick enough for dense-traffic lane changes. Service braking adds straight-line lateral and yaw stabilization; it does not release rear grip. The handbrake is deliberately separate: it releases rear grip quickly, opens the wider drift envelope, and enables drift scoring. A stronger mid-speed torque recovery makes brake-and-pass moves responsive while preserving the simulated gearbox and tire-force limits.
 
 Traffic collision shells sit slightly inside the visible body panels. A shallow door-to-door overlap is treated as a scrape: it produces sound, a small lateral nudge, mild combo damage, and no artificial spin. Front/rear impacts and hard lateral strikes still use the full crash response. This lets visually plausible gaps remain playable without making direct collisions harmless.
@@ -54,7 +58,8 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 
 ## Architecture
 
-- `src/main.ts` — fixed-step loop, input, run flow, Rapier synchronization, scoring orchestration, HUD, crash cut, and debug bridge.
+- `src/main.ts` - fixed-step loop, keyboard/multi-touch input, run flow, Rapier synchronization, scoring orchestration, HUD, crash cut, and debug bridge.
+- `src/game/mobileControls.ts` - pure multi-touch action state and conversion into the shared driver input model.
 - `src/game/vehicle.ts` — deterministic 120 Hz custom tire, steering, yaw, drivetrain, brake, handbrake, drag, and load-transfer simulation.
 - `src/game/scoring.ts` — pure pass lifecycle, nonlinear scoring, duplicate prevention, and combo logic.
 - `src/game/drift.ts` — pure drift qualification, radius/angle validation, point accumulation, and completion awards.
@@ -86,7 +91,8 @@ Open `http://127.0.0.1:4175/?debug=1` while the dedicated preview is running. Th
 
 ## Known limitations
 
-- Keyboard is the primary input; gamepad and touch are not implemented.
+- Mobile touch controls are tuned for portrait phones; landscape phone and tablet layouts remain usable but do not receive the same bespoke camera framing.
+- Gamepad input is not implemented.
 - Vehicle and traffic models use original runtime-built faceted shells rather than authored high-detail or licensed meshes.
 - Automotive effects are synthesized at runtime, so they are intentionally more stylized than recorded vehicle audio.
 - The world is semi-endless and recycled; it is not an open city map.
