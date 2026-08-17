@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHASE_FOV_BASE, CHASE_FOV_SPEED_GAIN, cinematicEase } from '../src/game/visuals';
+import { CHASE_FOV_BASE, CHASE_FOV_SPEED_GAIN, cinematicEase, createRoundedHoodGeometry } from '../src/game/visuals';
 import { createVehicleState, digitalSteer, speedSensitiveSteer, stepVehicle, torqueAtRpm } from '../src/game/vehicle';
 import { roadCenterX, roadHeading } from '../src/game/world';
 
@@ -28,6 +28,16 @@ describe('vehicle systems', () => {
   it('keeps the revised chase-camera FOV closer across the speed range', () => {
     expect(CHASE_FOV_BASE).toBe(62);
     expect(CHASE_FOV_BASE + CHASE_FOV_SPEED_GAIN).toBe(80);
+  });
+
+  it('builds a low rounded hood surface for the hood-mounted camera', () => {
+    const hood = createRoundedHoodGeometry();
+    hood.computeBoundingBox();
+    const bounds = hood.boundingBox!;
+    expect(bounds.max.x - bounds.min.x).toBeGreaterThan(1.7);
+    expect(bounds.max.z - bounds.min.z).toBeGreaterThan(1.6);
+    expect(bounds.max.y - bounds.min.y).toBeGreaterThan(.25);
+    hood.dispose();
   });
   it('uses a shaped torque curve', () => {
     expect(torqueAtRpm(4700)).toBeGreaterThan(torqueAtRpm(1800));

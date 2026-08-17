@@ -4,6 +4,16 @@ export function resolveMusicUrl(baseUri: string): string {
   return new URL('audio/midnight-loop-background.mp3', baseUri).href;
 }
 
+export function speedAudioProfile(speedMph: number): { wind: number; musicHighpassHz: number } {
+  const wind = Math.min(1, Math.max(0, (speedMph - 68) / 102));
+  const filterProgress = Math.min(1, Math.max(0, (speedMph - 95) / 70));
+  const smoothFilter = filterProgress * filterProgress * (3 - 2 * filterProgress);
+  return {
+    wind: Math.pow(wind, 1.35),
+    musicHighpassHz: 20 + smoothFilter * 600,
+  };
+}
+
 export class GameAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -11,6 +21,7 @@ export class GameAudio {
   private engineA: OscillatorNode | null = null;
   private engineB: OscillatorNode | null = null;
   private windGain: GainNode | null = null;
+  private windFilter: BiquadFilterNode | null = null;
   private tireGain: GainNode | null = null;
   private tireTone: OscillatorNode | null = null;
   private tireToneGain: GainNode | null = null;
@@ -22,9 +33,11 @@ export class GameAudio {
   private boostBassFilter: BiquadFilterNode | null = null;
   private music: HTMLAudioElement | null = null;
   private musicGain: GainNode | null = null;
+  private musicHighpass: BiquadFilterNode | null = null;
   private muted = false;
   private lastThrottle = 0;
   private lastBoostActive = false;
+  private lastHornAt = -10;
 
   async start(): Promise<void> {
     if (this.context) {
@@ -44,9 +57,13 @@ export class GameAudio {
     this.music.preload = 'auto';
     this.music.volume = 1;
     const musicSource = this.context.createMediaElementSource(this.music);
+    this.musicHighpass = this.context.createBiquadFilter();
+    this.musicHighpass.type = 'highpass';
+    this.musicHighpass.frequency.value = 20;
+    this.musicHighpass.Q.value = .58;
     this.musicGain = this.context.createGain();
     this.musicGain.gain.value = .34;
-    musicSource.connect(this.musicGain).connect(this.master);
+    musicSource.connect(this.musicHighpass).connect(this.musicGain).connect(this.master);
     // Invoke play while the Start Run click still owns browser user activation;
     // the rest of the procedural audio graph can finish constructing after it.
     const musicPlayback = this.playMusic();
@@ -71,9 +88,9 @@ export class GameAudio {
     const noiseBuffer = this.createNoise(3);
     const windSource = this.context.createBufferSource();
     windSource.buffer = noiseBuffer; windSource.loop = true;
-    const windFilter = this.context.createBiquadFilter(); windFilter.type = 'bandpass'; windFilter.frequency.value = 1100; windFilter.Q.value = .5;
+    this.windFilter = this.context.createBiquadFilter(); this.windFilter.type = 'bandpass'; this.windFilter.frequency.value = 1100; this.windFilter.Q.value = .5;
     this.windGain = this.context.createGain(); this.windGain.gain.value = 0;
-    windSource.connect(windFilter).connect(this.windGain).connect(this.master); windSource.start();
+    windSource.connect(this.windFilter).connect(this.windGain).connect(this.master); windSource.start();
     const tireSource = this.context.createBufferSource(); tireSource.buffer = noiseBuffer; tireSource.loop = true;
     const tireFilter = this.context.createBiquadFilter(); tireFilter.type = 'bandpass'; tireFilter.frequency.value = 2100; tireFilter.Q.value = 2.4;
     this.tireGain = this.context.createGain(); this.tireGain.gain.value = 0;
@@ -142,14 +159,17 @@ export class GameAudio {
   }
 
   update(state: VehicleState, dt: number, running: boolean): void {
-    if (!this.context || !this.engineGain || !this.engineA || !this.engineB || !this.windGain || !this.tireGain || !this.tireTone || !this.tireToneGain || !this.roadGain || !this.brakeGain || !this.boostGain || !this.boostBassGain || !this.boostFilter || !this.boostBassFilter) return;
+    if (!this.context || !this.engineGain || !this.engineA || !this.engineB || !this.windGain || !this.windFilter || !this.tireGain || !this.tireTone || !this.tireToneGain || !this.roadGain || !this.brakeGain || !this.boostGain || !this.boostBassGain || !this.boostFilter || !this.boostBassFilter) return;
     const now = this.context.currentTime;
     const fundamental = 31 + state.rpm / 52;
     this.engineA.frequency.setTargetAtTime(fundamental, now, .025);
     this.engineB.frequency.setTargetAtTime(fundamental * 1.98, now, .035);
     this.engineGain.gain.setTargetAtTime(running ? .15 + state.throttle * .15 + (state.boostActive ? .055 : 0) : .035, now, state.throttle > .2 ? .035 : .085);
-    const speedWind = Math.max(0, (state.speedMps - 13) / 72);
-    this.windGain.gain.setTargetAtTime(running ? speedWind * speedWind * .24 : 0, now, .09);
+    const speedAudio = speedAudioProfile(state.speedMph);
+    this.windFilter.frequency.setTargetAtTime(900 + speedAudio.wind * 1500, now, .16);
+    this.windFilter.Q.setTargetAtTime(.48 + speedAudio.wind * .42, now, .18);
+    this.windGain.gain.setTargetAtTime(running ? speedAudio.wind * .38 : 0, now, .12);
+    this.musicHighpass?.frequency.setTargetAtTime(running ? speedAudio.musicHighpassHz : 20, now, .45);
     const handbrakeBite = state.handbrakeActive && state.speedMps > 17 ? .34 : 0;
     const squeal = (Math.max(0, state.tireSlip - .13) + handbrakeBite) * Math.min(1, state.speedMps / 24);
     this.tireGain.gain.setTargetAtTime(running ? Math.min(.34, squeal * .26) : 0, now, .028);
@@ -190,9 +210,44 @@ export class GameAudio {
     const source = this.context.createBufferSource();
     source.buffer = this.createNoise(duration + .04);
     const filter = this.context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.setValueAtTime(720, now); filter.frequency.exponentialRampToValueAtTime(2100, now + duration * .5); filter.frequency.exponentialRampToValueAtTime(480, now + duration);
-    const gain = this.context.createGain(); gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(Math.min(.16, .035 + relativeSpeed * .0026), now + duration * .35); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    const gain = this.context.createGain(); gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(Math.min(.24, .055 + relativeSpeed * .0035), now + duration * .35); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
     const pan = this.context.createStereoPanner(); pan.pan.setValueAtTime(Math.sign(side) * .72, now); pan.pan.linearRampToValueAtTime(Math.sign(side) * .28, now + duration);
-    source.connect(filter).connect(gain).connect(pan).connect(this.master); source.start(now); source.stop(now + duration + .03);
+    source.connect(filter).connect(gain).connect(pan).connect(this.master);
+    const bodyFilter = this.context.createBiquadFilter(); bodyFilter.type = 'lowpass'; bodyFilter.frequency.value = 390 + Math.min(420, relativeSpeed * 9); bodyFilter.Q.value = .7;
+    const bodyGain = this.context.createGain(); bodyGain.gain.setValueAtTime(.0001, now); bodyGain.gain.exponentialRampToValueAtTime(Math.min(.12, .025 + relativeSpeed * .0017), now + duration * .42); bodyGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    const bodyPan = this.context.createStereoPanner(); bodyPan.pan.setValueAtTime(Math.sign(side) * .58, now); bodyPan.pan.linearRampToValueAtTime(0, now + duration);
+    source.connect(bodyFilter).connect(bodyGain).connect(bodyPan).connect(this.master);
+    source.start(now); source.stop(now + duration + .03);
+    if (relativeSpeed > 8 && now - this.lastHornAt > 1.35 && Math.random() < .18) {
+      this.lastHornAt = now;
+      this.trafficHorn(side, relativeSpeed);
+    }
+  }
+
+  private trafficHorn(side: number, relativeSpeed: number): void {
+    if (!this.context || !this.master) return;
+    const now = this.context.currentTime;
+    const duration = .16 + Math.min(.12, relativeSpeed * .0025);
+    const pan = this.context.createStereoPanner();
+    pan.pan.setValueAtTime(Math.sign(side) * .7, now);
+    pan.pan.linearRampToValueAtTime(Math.sign(side) * .35, now + duration);
+    const hornGain = this.context.createGain();
+    hornGain.gain.setValueAtTime(.0001, now);
+    hornGain.gain.exponentialRampToValueAtTime(.085, now + .018);
+    hornGain.gain.setValueAtTime(.085, now + duration * .68);
+    hornGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    hornGain.connect(pan).connect(this.master);
+    for (const [frequency, volume] of [[392, .72], [493.9, .42]] as const) {
+      const oscillator = this.context.createOscillator();
+      const partialGain = this.context.createGain();
+      oscillator.type = 'square';
+      oscillator.frequency.setValueAtTime(frequency, now);
+      oscillator.frequency.linearRampToValueAtTime(frequency * .985, now + duration);
+      partialGain.gain.value = volume;
+      oscillator.connect(partialGain).connect(hornGain);
+      oscillator.start(now);
+      oscillator.stop(now + duration + .02);
+    }
   }
   crash(severity: number): void {
     this.noiseHit(Math.min(.58, .34 + severity * .003), 105, .58);

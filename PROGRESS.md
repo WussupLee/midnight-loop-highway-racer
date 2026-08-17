@@ -479,3 +479,13 @@
 - Replaced the colored glass-style mobile controls with restrained thin white outlines, transparent faces, monochrome pedal ribs, and simple pressed-state feedback.
 - Moved the ordered dither overlay above every interface layer so its texture now covers the world, HUD, menus, touch controls, loading state, and crash presentation consistently.
 - TypeScript verification, all 63 automated tests, and the production build pass.
+
+## 2026-08-16 - Fisheye/VHS camera, speed audio, and hood view
+
+- Added a noticeable center-preserving fisheye distortion to the 3D camera output so the frame bends like a wide consumer lens while the centered player car retains approximately the existing apparent distance.
+- Expanded the application-level overlay into a rolling VHS treatment with scanlines, tracking bands, grain, and ordered dither above every game and interface layer; mobile control outlines now rest at 50% opacity.
+- Strengthened spatial traffic pass-bys with paired air/body Doppler sweeps and added occasional side-positioned dual-tone traffic horns with a cooldown.
+- Retuned wind to build clearly at high speed and routed the music through a smoothly automated high-pass filter that progressively removes bass only above highway speeds.
+- Removed the player's additive headlight projection plane—the source of the floating rectangle—while retaining the true broad spotlight and its road illumination.
+- Added a crowned, tapered hood surface and moved the hood camera behind the nose so the lower frame contains real bodywork; increased its high-speed vibration to match chase-camera intensity.
+- TypeScript verification, all 65 automated tests, and the production build pass.

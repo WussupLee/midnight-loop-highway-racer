@@ -35,47 +35,35 @@ function box(width: number, height: number, length: number, material: THREE.Mate
   return mesh;
 }
 
-function createPlayerRoadWash(): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(31.2, 44);
-  geometry.rotateX(-Math.PI / 2);
-  geometry.translate(0, 0, 22);
-  const material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    depthTest: true,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-    side: THREE.DoubleSide,
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      void main() {
-        float forward = 1.0 - vUv.y;
-        // Preserve the original lamp-width footprint at the bumper, then
-        // expand to three times the former street coverage at full reach.
-        float halfWidth = mix(.0533, .5, smoothstep(.05, .9, forward));
-        float lateral = 1.0 - smoothstep(halfWidth * .22, halfWidth, abs(vUv.x - .5));
-        float nearFade = smoothstep(.0, .1, forward);
-        float farFade = 1.0 - smoothstep(.54, .96, forward);
-        float meshEdge = smoothstep(.0, .08, vUv.x) * smoothstep(.0, .08, 1.0 - vUv.x)
-          * smoothstep(.0, .055, vUv.y) * smoothstep(.0, .055, 1.0 - vUv.y);
-        float center = 1.0 - smoothstep(0.0, .5, abs(vUv.x - .5));
-        float alpha = lateral * nearFade * farFade * meshEdge * (.34 + center * .66) * .215;
-        gl_FragColor = vec4(1.0, .88, .66, alpha);
-      }
-    `,
-  });
-  const wash = new THREE.Mesh(geometry, material);
-  wash.name = 'player-asphalt-headlight-wash';
-  wash.frustumCulled = false;
-  wash.renderOrder = -1;
-  return wash;
+export function createRoundedHoodGeometry(widthSegments = 10, lengthSegments = 12): THREE.BufferGeometry {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  for (let zIndex = 0; zIndex <= lengthSegments; zIndex += 1) {
+    const progress = zIndex / lengthSegments;
+    const z = .64 + progress * 1.66;
+    const halfWidth = .9 + (.67 - .9) * progress;
+    const baseY = .825 + (.585 - .825) * progress;
+    for (let xIndex = 0; xIndex <= widthSegments; xIndex += 1) {
+      const normalizedX = xIndex / widthSegments * 2 - 1;
+      const crown = (1 - normalizedX * normalizedX) * (.052 + (1 - progress) * .018);
+      vertices.push(normalizedX * halfWidth, baseY + crown, z);
+    }
+  }
+  const stride = widthSegments + 1;
+  for (let zIndex = 0; zIndex < lengthSegments; zIndex += 1) {
+    for (let xIndex = 0; xIndex < widthSegments; xIndex += 1) {
+      const a = zIndex * stride + xIndex;
+      const b = a + 1;
+      const c = a + stride;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
@@ -101,6 +89,11 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
   mainBody.castShadow = true;
   mainBody.receiveShadow = true;
   group.add(mainBody);
+  const roundedHood = new THREE.Mesh(createRoundedHoodGeometry(), paintMaterial);
+  roundedHood.name = 'rounded-player-hood';
+  roundedHood.castShadow = true;
+  roundedHood.receiveShadow = true;
+  group.add(roundedHood);
 
   const cabin = new THREE.Mesh(createLoftGeometry([
     { z: -1.2, bottomHalfWidth: .83, topHalfWidth: .61, bottomY: .79, topY: 1.14 },
@@ -307,12 +300,9 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
 
   const headlights: THREE.SpotLight[] = [];
   const headlightTargets: THREE.Object3D[] = [];
-  // One very broad, soft spotlight merges the two physical lamps into the
-  // overlapping road wash seen in the reference. Its steeper aim brings the
-  // light onto the asphalt close to the nose, and because it is scene lighting
-  // the same footprint works in chase and hood cameras without cone geometry.
-  const headlightRoadWash = createPlayerRoadWash();
-  scene.add(headlightRoadWash);
+  // The true spotlight is the only player headlight projection. Removing the
+  // former additive road plane keeps its rectangular mesh from becoming
+  // visible during the aerial intro and large handbrake yaw angles.
   const headlightTarget = new THREE.Object3D();
   headlightTarget.position.set(0, -1.7, 30);
   const headlight = new THREE.SpotLight(0xffedc8, 520, 68, .66, .995, 1.7);
@@ -339,13 +329,6 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
       visualPitch += (targetPitch - visualPitch) * Math.min(1, dt * 7.5);
       group.rotation.z = clampVisual(visualRoll, -.095, .095);
       group.rotation.x = visualPitch;
-      // Keep the pool clear of the highway's gentle elevation changes. The
-      // previous near-coplanar placement was progressively depth-clipped and
-      // looked as if the headlights were unrolling after a run began.
-      const washFarZ = state.z + Math.cos(state.yaw) * 44;
-      const washPitch = -Math.atan2(roadCenterY(washFarZ) - roadY, 44);
-      headlightRoadWash.position.set(state.x, roadY + .016, state.z);
-      headlightRoadWash.rotation.set(washPitch, state.yaw, 0, 'YXZ');
       for (const wheel of wheels) wheel.rotation.x -= state.longitudinalSpeed * dt / .39;
       for (const pivot of frontPivots) pivot.rotation.y = state.steerAngle;
       for (const light of brakeLights) {
@@ -509,8 +492,8 @@ export class ChaseCamera {
   reset(state: VehicleState): void {
     const forward = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw));
     if (this.mode === 'hood') {
-      this.position.set(state.x, roadCenterY(state.z) + 1.34, state.z).addScaledVector(forward, 2.56);
-      this.look.set(state.x, roadCenterY(state.z) + 1.05, state.z).addScaledVector(forward, 29);
+      this.position.set(state.x, roadCenterY(state.z) + 1.12, state.z).addScaledVector(forward, 1.1);
+      this.look.set(state.x, roadCenterY(state.z) + .97, state.z).addScaledVector(forward, 29);
     } else {
       const distance = this.portraitLayout ? -4.45 : -4.35;
       const height = this.portraitLayout ? 2.43 : 2.34;
@@ -537,11 +520,11 @@ export class ChaseCamera {
     const fovSpeed = Math.pow(Math.min(1, Math.max(0, (speedMph - 82) / 98)), 1.7);
     const accelerationPullback = Math.min(.55, Math.max(-.24, state.lastLongAccel * .055));
     const desired = this.mode === 'hood'
-      ? new THREE.Vector3(state.x, roadCenterY(state.z) + 1.34, state.z).addScaledVector(forward, 2.56)
+      ? new THREE.Vector3(state.x, roadCenterY(state.z) + 1.12, state.z).addScaledVector(forward, 1.1)
       : new THREE.Vector3(state.x, roadCenterY(state.z) + (this.portraitLayout ? 2.41 : 2.32) + highSpeed * .14, state.z)
         .addScaledVector(forward, (this.portraitLayout ? -4.45 : -4.35) - accelerationPullback * .4)
         .addScaledVector(right, -state.steering * .055);
-    const lookDesired = new THREE.Vector3(state.x, roadCenterY(state.z) + (this.mode === 'hood' ? 1.05 : .76), state.z)
+    const lookDesired = new THREE.Vector3(state.x, roadCenterY(state.z) + (this.mode === 'hood' ? .97 : .76), state.z)
       .addScaledVector(forward, this.mode === 'hood' ? 29 : 12.5 + highSpeed * 3.4)
       .addScaledVector(right, state.steering * (this.mode === 'hood' ? .58 : .62 + highSpeed * .28));
     const positionDamp = 1 - Math.exp(-dt * 8.2);
@@ -553,7 +536,7 @@ export class ChaseCamera {
     else this.position.lerp(desired, positionDamp);
     this.look.lerp(lookDesired, lookDamp);
     this.phase += dt * (11 + state.speedMps * .13);
-    const highSpeedVibration = highSpeed * highSpeed * (this.mode === 'hood' ? .052 : .068);
+    const highSpeedVibration = highSpeed * highSpeed * (this.mode === 'hood' ? .066 : .068);
     this.speedShake = highSpeedVibration;
     this.shake = Math.max(0, this.shake - dt * 2.8);
     const impact = this.shake * this.shake * .22;
