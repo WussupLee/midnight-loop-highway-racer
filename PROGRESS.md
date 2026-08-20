@@ -489,3 +489,11 @@
 - Removed the player's additive headlight projection plane—the source of the floating rectangle—while retaining the true broad spotlight and its road illumination.
 - Added a crowned, tapered hood surface and moved the hood camera behind the nose so the lower frame contains real bodywork; increased its high-speed vibration to match chase-camera intensity.
 - TypeScript verification, all 65 automated tests, and the production build pass.
+
+## 2026-08-19 - Clean lens and universal traffic pass audio
+
+- Removed the fisheye/barrel UV warp, curved edge mask, VHS scanlines, moving tracking band, and VHS-wide color filter while preserving the established static ordered dithering across the world and interface.
+- Reversed the music response: playback remains high-pass/bass-reduced below 95 mph, then restores the complete low end across a short transition above the threshold.
+- Removed the eight-metre pass-audio restriction so every traffic car that crosses behind the player now emits a spatial drive-by sound.
+- Rebuilt the drive-by as a louder three-layer event: descending Doppler air noise, low body displacement, and a short pitch-dropping vehicle tone. Proximity and relative speed strengthen the effect, while near-miss and perfect-pass stings remain synchronized to the same pass.
+- TypeScript verification, all 66 automated tests, and the production build pass.

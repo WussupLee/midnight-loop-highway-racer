@@ -6,11 +6,21 @@ export function resolveMusicUrl(baseUri: string): string {
 
 export function speedAudioProfile(speedMph: number): { wind: number; musicHighpassHz: number } {
   const wind = Math.min(1, Math.max(0, (speedMph - 68) / 102));
-  const filterProgress = Math.min(1, Math.max(0, (speedMph - 95) / 70));
-  const smoothFilter = filterProgress * filterProgress * (3 - 2 * filterProgress);
+  const bassReturn = Math.min(1, Math.max(0, (speedMph - 95) / 14));
+  const smoothBassReturn = bassReturn * bassReturn * (3 - 2 * bassReturn);
   return {
     wind: Math.pow(wind, 1.35),
-    musicHighpassHz: 20 + smoothFilter * 600,
+    musicHighpassHz: 20 + (1 - smoothBassReturn) * 600,
+  };
+}
+
+export function trafficPassProfile(relativeSpeed: number, lateralDistance: number): { duration: number; airGain: number; bodyGain: number } {
+  const speed = Math.min(1, Math.max(0, (relativeSpeed - .5) / 34));
+  const proximity = 1 - Math.min(1, Math.max(0, (lateralDistance - 1.8) / 13));
+  return {
+    duration: .52 - speed * .23,
+    airGain: .11 + speed * .18 + proximity * .1,
+    bodyGain: .045 + speed * .085 + proximity * .055,
   };
 }
 
@@ -203,21 +213,28 @@ export class GameAudio {
   threadNeedle(): void { this.tone(523, .055, .26, 'triangle', 2); setTimeout(() => this.tone(784, .05, .2, 'sine', 1.25), 70); }
   driftBonus(): void { this.tone(392, .045, .18, 'triangle', 1.5); setTimeout(() => this.tone(587, .035, .16, 'sine', 1.2), 65); }
   collision(severity: number): void { this.noiseHit(Math.min(.32, .08 + severity * .004), 170 + severity * 5, .25); this.tone(48, Math.min(.25, severity * .004), .22, 'sawtooth', .45); }
-  trafficPass(side: number, relativeSpeed: number): void {
-    if (!this.context || !this.master || relativeSpeed < 4) return;
+  trafficPass(side: number, relativeSpeed: number, lateralDistance = 4): void {
+    if (!this.context || !this.master || relativeSpeed < .5) return;
     const now = this.context.currentTime;
-    const duration = Math.max(.15, Math.min(.42, .5 - relativeSpeed * .008));
+    const profile = trafficPassProfile(relativeSpeed, lateralDistance);
+    const duration = profile.duration;
     const source = this.context.createBufferSource();
     source.buffer = this.createNoise(duration + .04);
-    const filter = this.context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.setValueAtTime(720, now); filter.frequency.exponentialRampToValueAtTime(2100, now + duration * .5); filter.frequency.exponentialRampToValueAtTime(480, now + duration);
-    const gain = this.context.createGain(); gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(Math.min(.24, .055 + relativeSpeed * .0035), now + duration * .35); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    const pan = this.context.createStereoPanner(); pan.pan.setValueAtTime(Math.sign(side) * .72, now); pan.pan.linearRampToValueAtTime(Math.sign(side) * .28, now + duration);
+    const filter = this.context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.setValueAtTime(2600 + Math.min(1500, relativeSpeed * 24), now); filter.frequency.exponentialRampToValueAtTime(520, now + duration); filter.Q.value = .58;
+    const gain = this.context.createGain(); gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(profile.airGain, now + duration * .38); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    const pan = this.context.createStereoPanner(); pan.pan.setValueAtTime(Math.sign(side) * .82, now); pan.pan.linearRampToValueAtTime(Math.sign(side) * .18, now + duration);
     source.connect(filter).connect(gain).connect(pan).connect(this.master);
     const bodyFilter = this.context.createBiquadFilter(); bodyFilter.type = 'lowpass'; bodyFilter.frequency.value = 390 + Math.min(420, relativeSpeed * 9); bodyFilter.Q.value = .7;
-    const bodyGain = this.context.createGain(); bodyGain.gain.setValueAtTime(.0001, now); bodyGain.gain.exponentialRampToValueAtTime(Math.min(.12, .025 + relativeSpeed * .0017), now + duration * .42); bodyGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    const bodyGain = this.context.createGain(); bodyGain.gain.setValueAtTime(.0001, now); bodyGain.gain.exponentialRampToValueAtTime(profile.bodyGain, now + duration * .42); bodyGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
     const bodyPan = this.context.createStereoPanner(); bodyPan.pan.setValueAtTime(Math.sign(side) * .58, now); bodyPan.pan.linearRampToValueAtTime(0, now + duration);
     source.connect(bodyFilter).connect(bodyGain).connect(bodyPan).connect(this.master);
+    const doppler = this.context.createOscillator(); doppler.type = 'triangle';
+    doppler.frequency.setValueAtTime(185 + Math.min(210, relativeSpeed * 4.5), now);
+    doppler.frequency.exponentialRampToValueAtTime(82, now + duration);
+    const dopplerGain = this.context.createGain(); dopplerGain.gain.setValueAtTime(.0001, now); dopplerGain.gain.exponentialRampToValueAtTime(profile.bodyGain * .38, now + duration * .34); dopplerGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+    doppler.connect(dopplerGain).connect(bodyPan);
     source.start(now); source.stop(now + duration + .03);
+    doppler.start(now); doppler.stop(now + duration + .03);
     if (relativeSpeed > 8 && now - this.lastHornAt > 1.35 && Math.random() < .18) {
       this.lastHornAt = now;
       this.trafficHorn(side, relativeSpeed);

@@ -242,14 +242,7 @@ const cameraPass = new ShaderPass({
     void main() {
       vec2 centered = vUv - 0.5;
       float radial = length(centered) / 0.7071;
-      // A center-preserving barrel curve gives the scene a noticeable
-      // consumer wide-angle/fisheye character without changing the apparent
-      // distance to the centered player car.
-      float lensRadiusSquared = dot(centered, centered);
-      vec2 fisheyeUv = 0.5 + centered * (1.0 + lensRadiusSquared * .38);
-      vec2 sampleUv = clamp(fisheyeUv, 0.001, 0.999);
-      float lensEdge = max(abs(fisheyeUv.x - .5), abs(fisheyeUv.y - .5)) * 2.0;
-      float lensMask = 1.0 - smoothstep(.985, 1.075, lensEdge);
+      vec2 sampleUv = clamp(vUv, 0.001, 0.999);
       vec2 pixel = 1.0 / max(uResolution, vec2(1.0));
       vec2 radialDirection = normalize(centered + vec2(0.00001));
       vec3 base = sourceAt(sampleUv);
@@ -323,7 +316,6 @@ const cameraPass = new ShaderPass({
       float ditherLevels = 9.0;
       vec3 dithered = floor(clamp(color, 0.0, 1.0) * ditherLevels + ditherThreshold + .5) / ditherLevels;
       color = mix(color, dithered, uHeavyDither * .94);
-      color *= mix(.16, 1.0, lensMask);
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
     }
   `,
@@ -846,8 +838,13 @@ function simulate(dt: number): void {
     PLAYER_COLLISION_HALF_LENGTH,
   );
   for (const item of traffic.vehicles) {
-    if (item.passedPlayer && Math.abs(item.group.position.x - vehicle.x) < 8) {
-      audio.trafficPass(item.group.position.x > vehicle.x ? 1 : -1, Math.max(0, vehicle.speedMps - item.speed));
+    if (item.passedPlayer) {
+      const lateralDistance = Math.abs(item.group.position.x - vehicle.x);
+      audio.trafficPass(
+        item.group.position.x > vehicle.x ? 1 : -1,
+        Math.max(0, vehicle.speedMps - item.speed),
+        lateralDistance,
+      );
     }
   }
   const collisionIds = new Set<number>();

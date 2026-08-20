@@ -21,7 +21,6 @@
 
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050504; }
-#app { filter: saturate(.9) contrast(1.065); }
 body { user-select: none; }
 button, select, input { font: inherit; }
 button { color: inherit; }
@@ -29,9 +28,8 @@ button { color: inherit; }
 
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: radial-gradient(circle at 52% 18%, #242018 0, #0b0b0a 42%, #020202 100%); }
 #app::before { content: ''; position: fixed; inset: 0; z-index: 24; pointer-events: none; background: radial-gradient(ellipse at center, transparent 43%, rgba(0,0,0,.69) 100%); }
-#app::after { content: ''; position: fixed; inset: -8px 0; z-index: 130; pointer-events: none; opacity: .34; mix-blend-mode: soft-light; image-rendering: pixelated; background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.42) 0 1px, rgba(255,255,255,.055) 1px 2px, transparent 2px 4px), linear-gradient(0deg, transparent 0 46%, rgba(235,240,231,.13) 48%, rgba(0,0,0,.2) 51%, transparent 54%), radial-gradient(circle at 1px 1px, rgba(245,242,230,.36) 0 .55px, transparent .72px), radial-gradient(circle at 3px 3px, rgba(0,0,0,.5) 0 .7px, transparent .88px), radial-gradient(circle at 5px 1px, rgba(239,237,225,.22) 0 .5px, transparent .72px); background-size: 100% 4px, 100% 190px, 4px 4px, 4px 4px, 8px 8px; animation: vhs-overlay-roll 4.8s steps(10) infinite; }
-.heavy-dither #app::after { opacity: .55; mix-blend-mode: soft-light; background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.5) 0 1px, rgba(255,255,255,.07) 1px 2px, transparent 2px 4px), linear-gradient(0deg, transparent 0 45%, rgba(245,247,233,.17) 48%, rgba(0,0,0,.28) 51%, transparent 55%), radial-gradient(circle at 1px 1px, rgba(255,255,246,.58) 0 .65px, transparent .82px), radial-gradient(circle at 3px 3px, rgba(0,0,0,.76) 0 .78px, transparent .95px), radial-gradient(circle at 5px 1px, rgba(244,240,219,.38) 0 .62px, transparent .8px), radial-gradient(circle at 1px 5px, rgba(0,0,0,.46) 0 .62px, transparent .8px); background-size: 100% 4px, 100% 178px, 4px 4px, 4px 4px, 8px 8px, 8px 8px; }
-@keyframes vhs-overlay-roll { 0% { background-position: 0 0, 0 -210px, 0 0, 0 0, 0 0; } 48% { background-position: 0 1px, 0 42vh, 1px 0, 0 1px, 0 0; } 50% { background-position: 0 2px, 0 44vh, -1px 0, 1px 0, 0 1px; } 100% { background-position: 0 4px, 0 calc(100vh + 210px), 0 0, 0 0, 0 0; } }
+#app::after { content: ''; position: fixed; inset: 0; z-index: 130; pointer-events: none; opacity: .22; mix-blend-mode: soft-light; image-rendering: pixelated; background-image: radial-gradient(circle at 1px 1px, rgba(245,242,230,.3) 0 .55px, transparent .7px), radial-gradient(circle at 3px 3px, rgba(0,0,0,.42) 0 .7px, transparent .85px), radial-gradient(circle at 5px 1px, rgba(239,237,225,.18) 0 .5px, transparent .7px); background-size: 4px 4px, 4px 4px, 8px 8px; }
+.heavy-dither #app::after { opacity: .48; mix-blend-mode: soft-light; background-image: radial-gradient(circle at 1px 1px, rgba(255,255,246,.58) 0 .65px, transparent .82px), radial-gradient(circle at 3px 3px, rgba(0,0,0,.76) 0 .78px, transparent .95px), radial-gradient(circle at 5px 1px, rgba(244,240,219,.38) 0 .62px, transparent .8px), radial-gradient(circle at 1px 5px, rgba(0,0,0,.46) 0 .62px, transparent .8px); background-size: 4px 4px, 4px 4px, 8px 8px, 8px 8px; }
 
 .loading-screen { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; gap: 18px; text-align: center; background: #070706; color: #c7c4b8; letter-spacing: .28em; transition: opacity .45s ease; }
 .loading-screen.fade { opacity: 0; pointer-events: none; }
