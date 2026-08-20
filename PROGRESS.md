@@ -497,3 +497,9 @@
 - Removed the eight-metre pass-audio restriction so every traffic car that crosses behind the player now emits a spatial drive-by sound.
 - Rebuilt the drive-by as a louder three-layer event: descending Doppler air noise, low body displacement, and a short pitch-dropping vehicle tone. Proximity and relative speed strengthen the effect, while near-miss and perfect-pass stings remain synchronized to the same pass.
 - TypeScript verification, all 66 automated tests, and the production build pass.
+## 2026-08-19 - Recorded traffic horn
+
+- Replaced the traffic horn's square-wave oscillators with a real two-beep vehicle-horn recording sourced from Wikimedia Commons.
+- Selected the CC0 version by 15HPanska_Ruttner_Jan so the public build can redistribute and adapt it without proprietary licensing.
+- Added stereo side placement, a restrained Doppler playback-rate fall, distance-friendly filtering, and a natural two-second envelope while preserving the existing occasional-horn cooldown.
+- Added hosted-subpath regression coverage for the horn asset URL and documented the source/license in README.

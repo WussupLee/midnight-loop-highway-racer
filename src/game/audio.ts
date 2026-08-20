@@ -4,6 +4,10 @@ export function resolveMusicUrl(baseUri: string): string {
   return new URL('audio/midnight-loop-background.mp3', baseUri).href;
 }
 
+export function resolveTrafficHornUrl(baseUri: string): string {
+  return new URL('audio/traffic-car-horn.ogg', baseUri).href;
+}
+
 export function speedAudioProfile(speedMph: number): { wind: number; musicHighpassHz: number } {
   const wind = Math.min(1, Math.max(0, (speedMph - 68) / 102));
   const bassReturn = Math.min(1, Math.max(0, (speedMph - 95) / 14));
@@ -44,6 +48,7 @@ export class GameAudio {
   private music: HTMLAudioElement | null = null;
   private musicGain: GainNode | null = null;
   private musicHighpass: BiquadFilterNode | null = null;
+  private trafficHornBuffer: AudioBuffer | null = null;
   private muted = false;
   private lastThrottle = 0;
   private lastBoostActive = false;
@@ -77,6 +82,7 @@ export class GameAudio {
     // Invoke play while the Start Run click still owns browser user activation;
     // the rest of the procedural audio graph can finish constructing after it.
     const musicPlayback = this.playMusic();
+    const hornLoading = this.loadTrafficHorn();
 
     const engineFilter = this.context.createBiquadFilter();
     engineFilter.type = 'lowpass';
@@ -129,7 +135,18 @@ export class GameAudio {
     this.boostBassGain = this.context.createGain(); this.boostBassGain.gain.value = 0;
     boostBassSource.connect(this.boostBassFilter).connect(this.boostBassGain).connect(this.master); boostBassSource.start();
 
-    await musicPlayback;
+    await Promise.all([musicPlayback, hornLoading]);
+  }
+
+  private async loadTrafficHorn(): Promise<void> {
+    if (!this.context || this.trafficHornBuffer) return;
+    try {
+      const response = await fetch(resolveTrafficHornUrl(document.baseURI), { cache: 'force-cache' });
+      if (!response.ok) return;
+      this.trafficHornBuffer = await this.context.decodeAudioData(await response.arrayBuffer());
+    } catch {
+      // Horns are optional ambience; a failed asset request must not interrupt a run.
+    }
   }
 
   private async playMusic(): Promise<void> {
@@ -242,29 +259,29 @@ export class GameAudio {
   }
 
   private trafficHorn(side: number, relativeSpeed: number): void {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.master || !this.trafficHornBuffer) return;
     const now = this.context.currentTime;
-    const duration = .16 + Math.min(.12, relativeSpeed * .0025);
+    const duration = Math.min(2.15, this.trafficHornBuffer.duration);
+    const source = this.context.createBufferSource();
+    source.buffer = this.trafficHornBuffer;
+    const initialRate = .98 + Math.min(.08, relativeSpeed * .0016);
+    source.playbackRate.setValueAtTime(initialRate, now);
+    source.playbackRate.exponentialRampToValueAtTime(initialRate * .91, now + duration);
+    const toneFilter = this.context.createBiquadFilter();
+    toneFilter.type = 'lowpass';
+    toneFilter.frequency.value = 2850 + Math.min(900, relativeSpeed * 18);
+    toneFilter.Q.value = .5;
     const pan = this.context.createStereoPanner();
     pan.pan.setValueAtTime(Math.sign(side) * .7, now);
-    pan.pan.linearRampToValueAtTime(Math.sign(side) * .35, now + duration);
+    pan.pan.linearRampToValueAtTime(Math.sign(side) * .28, now + duration);
     const hornGain = this.context.createGain();
     hornGain.gain.setValueAtTime(.0001, now);
-    hornGain.gain.exponentialRampToValueAtTime(.085, now + .018);
-    hornGain.gain.setValueAtTime(.085, now + duration * .68);
+    hornGain.gain.exponentialRampToValueAtTime(.2, now + .018);
+    hornGain.gain.setValueAtTime(.2, now + Math.min(.11, duration * .35));
     hornGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    hornGain.connect(pan).connect(this.master);
-    for (const [frequency, volume] of [[392, .72], [493.9, .42]] as const) {
-      const oscillator = this.context.createOscillator();
-      const partialGain = this.context.createGain();
-      oscillator.type = 'square';
-      oscillator.frequency.setValueAtTime(frequency, now);
-      oscillator.frequency.linearRampToValueAtTime(frequency * .985, now + duration);
-      partialGain.gain.value = volume;
-      oscillator.connect(partialGain).connect(hornGain);
-      oscillator.start(now);
-      oscillator.stop(now + duration + .02);
-    }
+    source.connect(toneFilter).connect(hornGain).connect(pan).connect(this.master);
+    source.start(now, 0, duration);
+    source.stop(now + duration + .02);
   }
   crash(severity: number): void {
     this.noiseHit(Math.min(.58, .34 + severity * .003), 105, .58);
