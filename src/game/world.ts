@@ -16,7 +16,10 @@ export const TUNNEL_VENT_SPACING = 30;
 export const TUNNEL_CONDUIT_COUNT = 4;
 export const HIGHWAY_CHUNK_LENGTH = 150;
 export const TUNNEL_AUDIO_TRANSITION_LENGTH = 32;
+export const TUNNEL_ZONE_CHUNKS = 16;
 export const ROAD_CURVE_CELL_LENGTH = 900;
+
+let roadRouteSeed = 481516;
 
 export interface TunnelWallDetailPlan {
   panelCountPerSide: number;
@@ -40,8 +43,17 @@ export function tunnelWallDetailPlan(length: number): TunnelWallDetailPlan {
 }
 
 export function isTunnelChunkNumber(chunkNumber: number): boolean {
-  const phase = Math.abs(chunkNumber % 13);
-  return phase === 7 || phase === 8;
+  const zone = Math.floor(chunkNumber / TUNNEL_ZONE_CHUNKS);
+  const localChunk = chunkNumber - zone * TUNNEL_ZONE_CHUNKS;
+  const random = seeded(roadRouteSeed ^ Math.imul(zone + 8191, 73856093));
+  // Keep the opening kilometer in daylight so the first bend is always
+  // readable; later tunnel entrances can land anywhere within their zone.
+  const tunnelStart = zone === 0
+    ? 7 + Math.floor(random() * 4)
+    : 2 + Math.floor(random() * 10);
+  const lengthRoll = random();
+  const tunnelLength = lengthRoll < .22 ? 1 : lengthRoll < .78 ? 2 : 3;
+  return localChunk >= tunnelStart && localChunk < tunnelStart + tunnelLength;
 }
 
 export function tunnelAcousticAmount(z: number, transitionLength = TUNNEL_AUDIO_TRANSITION_LENGTH): number {
@@ -66,7 +78,6 @@ interface RoadCurveCell {
   shift: number;
 }
 
-let roadRouteSeed = 481516;
 let roadCurveCells: RoadCurveCell[] = [];
 let roadCurveOffsets: number[] = [0];
 
@@ -103,19 +114,44 @@ function ensureRoadCurveCell(index: number): void {
     const cellIndex = roadCurveCells.length;
     const random = seeded(roadRouteSeed + (cellIndex + 1) * 104729);
     const previousOffset = roadCurveOffsets[cellIndex];
-    const wantsCurve = random() < .68;
+    const curveRoll = random();
+    const wantsCurve = cellIndex === 0 || curveRoll < .8;
     let direction = random() < .5 ? -1 : 1;
-    if (previousOffset > 42) direction = -1;
-    else if (previousOffset < -42) direction = 1;
-    const magnitude = 23 + random() * 15;
-    const start = 255 + random() * 85;
-    const duration = 390 + random() * 75;
-    const globalStart = cellIndex * ROAD_CURVE_CELL_LENGTH + start;
-    const firstChunk = Math.floor(globalStart / 150);
-    const lastChunk = Math.floor((globalStart + duration) / 150);
-    let crossesTunnel = false;
-    for (let chunk = firstChunk; chunk <= lastChunk; chunk += 1) {
-      if (isTunnelChunkNumber(chunk)) crossesTunnel = true;
+    if (previousOffset > 52) direction = -1;
+    else if (previousOffset < -52) direction = 1;
+
+    // Mix broad sweepers with medium and sharper freeway bends. The target
+    // heading is used to derive the lateral shift, keeping every profile
+    // comfortably below the abrupt angles of a city-street corner.
+    const profileRoll = random();
+    let duration: number;
+    let targetHeading: number;
+    if (profileRoll < .34) {
+      duration = 500 + random() * 145;
+      targetHeading = THREE.MathUtils.degToRad(1.6 + random() * 2.2);
+    } else if (profileRoll < .78) {
+      duration = 405 + random() * 125;
+      targetHeading = THREE.MathUtils.degToRad(3.4 + random() * 2.1);
+    } else {
+      duration = 335 + random() * 105;
+      targetHeading = THREE.MathUtils.degToRad(5.6 + random() * 2.4);
+    }
+
+    // smootherStep peaks at a derivative of 1.875. Converting the desired
+    // heading through tan() makes the resulting roadHeading match it closely.
+    const magnitude = Math.tan(targetHeading) * duration / 1.875;
+    let start = 0;
+    let crossesTunnel = true;
+    for (let attempt = 0; attempt < 5 && crossesTunnel; attempt += 1) {
+      const latestStart = ROAD_CURVE_CELL_LENGTH - duration - 85;
+      start = 105 + random() * Math.max(0, latestStart - 105);
+      const globalStart = cellIndex * ROAD_CURVE_CELL_LENGTH + start;
+      const firstChunk = Math.floor(globalStart / HIGHWAY_CHUNK_LENGTH);
+      const lastChunk = Math.floor((globalStart + duration) / HIGHWAY_CHUNK_LENGTH);
+      crossesTunnel = false;
+      for (let chunk = firstChunk; chunk <= lastChunk; chunk += 1) {
+        if (isTunnelChunkNumber(chunk)) crossesTunnel = true;
+      }
     }
     const shift = wantsCurve && !crossesTunnel ? direction * magnitude : 0;
     roadCurveCells.push({

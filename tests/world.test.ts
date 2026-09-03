@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_CONDUIT_COUNT, TUNNEL_PANEL_SPACING, TUNNEL_UNIFORM_FILL_INTENSITY, TUNNEL_VENT_SPACING, tunnelAcousticAmount, tunnelWallDetailPlan } from '../src/game/world';
+import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, HIGHWAY_CHUNK_LENGTH, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_CONDUIT_COUNT, TUNNEL_PANEL_SPACING, TUNNEL_UNIFORM_FILL_INTENSITY, TUNNEL_VENT_SPACING, TUNNEL_ZONE_CHUNKS, tunnelAcousticAmount, tunnelWallDetailPlan } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -31,14 +31,27 @@ describe('randomized gradual freeway curves', () => {
     configureRoadRoute(481516);
   });
 
-  it('uses occasional long transitions with freeway-safe headings and straight recovery', () => {
+  it('mixes gradual and sharper transitions while staying freeway-safe', () => {
     configureRoadRoute(12051);
-    const samples = Array.from({ length: 90 }, (_, index) => index * 75);
+    const samples = Array.from({ length: 3600 }, (_, index) => index * 5);
+    const curvedHeadings = samples.map((z) => Math.abs(roadHeading(z))).filter((heading) => heading > .004);
     expect(samples.some((z) => Math.abs(roadCenterX(z)) > 5)).toBe(true);
-    expect(Math.max(...samples.map((z) => Math.abs(roadHeading(z))))).toBeLessThan(.2);
-    for (let cell = 0; cell < 6; cell += 1) {
+    expect(curvedHeadings.some((heading) => heading < .055)).toBe(true);
+    expect(curvedHeadings.some((heading) => heading > .09)).toBe(true);
+    expect(Math.max(...curvedHeadings)).toBeLessThan(8.2 * Math.PI / 180);
+    for (let cell = 0; cell < 18; cell += 1) {
       const recoveryZ = (cell + 1) * ROAD_CURVE_CELL_LENGTH - 55;
       expect(Math.abs(roadHeading(recoveryZ))).toBeLessThan(.002);
+    }
+    configureRoadRoute(481516);
+  });
+
+  it('guarantees a visible bend early in every run', () => {
+    for (const seed of [1, 17, 12051, 77291, 481516, 2147483646]) {
+      configureRoadRoute(seed);
+      const openingHeadings = Array.from({ length: 140 }, (_, index) => Math.abs(roadHeading(index * 5)));
+      expect(Math.max(...openingHeadings)).toBeGreaterThan(.025);
+      expect(Array.from({ length: 7 }, (_, chunk) => isTunnelChunkNumber(chunk)).some(Boolean)).toBe(false);
     }
     configureRoadRoute(481516);
   });
@@ -46,13 +59,37 @@ describe('randomized gradual freeway curves', () => {
 
 describe('tunnel geometry', () => {
   it('fades tunnel acoustics in at the portals and holds them through the interior', () => {
-    expect(tunnelAcousticAmount(1049.9)).toBe(0);
-    expect(tunnelAcousticAmount(1050)).toBe(0);
-    expect(tunnelAcousticAmount(1066)).toBeCloseTo(.5);
-    expect(tunnelAcousticAmount(1082)).toBe(1);
-    expect(tunnelAcousticAmount(1200)).toBe(1);
-    expect(tunnelAcousticAmount(1349.9)).toBeGreaterThan(0);
-    expect(tunnelAcousticAmount(1350)).toBe(0);
+    configureRoadRoute(481516);
+    const entranceChunk = Array.from({ length: TUNNEL_ZONE_CHUNKS }, (_, chunk) => chunk)
+      .find((chunk) => isTunnelChunkNumber(chunk))!;
+    const entranceZ = entranceChunk * HIGHWAY_CHUNK_LENGTH;
+    expect(tunnelAcousticAmount(entranceZ - .1)).toBe(0);
+    expect(tunnelAcousticAmount(entranceZ)).toBe(0);
+    expect(tunnelAcousticAmount(entranceZ + 16)).toBeCloseTo(.5);
+    expect(tunnelAcousticAmount(entranceZ + 32)).toBe(1);
+  });
+
+  it('varies tunnel spacing and length reproducibly with the route seed', () => {
+    configureRoadRoute(12051);
+    const first = Array.from({ length: 96 }, (_, chunk) => isTunnelChunkNumber(chunk));
+    configureRoadRoute(12051);
+    expect(Array.from({ length: 96 }, (_, chunk) => isTunnelChunkNumber(chunk))).toEqual(first);
+    configureRoadRoute(77291);
+    expect(Array.from({ length: 96 }, (_, chunk) => isTunnelChunkNumber(chunk))).not.toEqual(first);
+
+    configureRoadRoute(12051);
+    const tunnelRuns: number[] = [];
+    for (let chunk = 0; chunk < first.length; chunk += 1) {
+      if (!first[chunk]) continue;
+      let length = 0;
+      while (chunk < first.length && first[chunk]) {
+        length += 1;
+        chunk += 1;
+      }
+      tunnelRuns.push(length);
+    }
+    expect(new Set(tunnelRuns).size).toBeGreaterThan(1);
+    configureRoadRoute(481516);
   });
   it('builds a wide elliptical arch with road-level sides and a raised crown', () => {
     const geometry = createTunnelArchGeometry(150, 12.9, 6.8, 24);
@@ -72,9 +109,7 @@ describe('tunnel geometry', () => {
     expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeGreaterThan(6);
     expect(TUNNEL_CEILING_LIGHT_HEIGHT).toBeLessThan(6.8);
     expect(TUNNEL_UNIFORM_FILL_INTENSITY).toBeGreaterThan(.7);
-    expect(isTunnelChunkNumber(7)).toBe(true);
-    expect(isTunnelChunkNumber(8)).toBe(true);
-    expect(isTunnelChunkNumber(9)).toBe(false);
+    expect(Array.from({ length: TUNNEL_ZONE_CHUNKS }, (_, chunk) => isTunnelChunkNumber(chunk)).some(Boolean)).toBe(true);
   });
 
   it('layers frequent constructed wall panels, vents, conduits, and service boxes', () => {
