@@ -3,6 +3,7 @@ import {
   SOUND_FILES,
   engineMixProfile,
   enginePlaybackRate,
+  engineVolumeProfile,
   resolveMusicUrl,
   resolveSoundUrl,
   resolveTrafficHornUrl,
@@ -37,11 +38,11 @@ describe('hosted music path', () => {
 
 describe('sample-driven vehicle mix', () => {
   it('tracks engine RPM continuously and clamps playback outside the rev range', () => {
-    expect(enginePlaybackRate(900)).toBeCloseTo(.94);
-    expect(enginePlaybackRate(7800)).toBeCloseTo(1.06);
+    expect(enginePlaybackRate(900)).toBeCloseTo(.88);
+    expect(enginePlaybackRate(7800)).toBeCloseTo(1.16);
     expect(enginePlaybackRate(4800)).toBeGreaterThan(enginePlaybackRate(2200));
-    expect(enginePlaybackRate(-100)).toBeCloseTo(.94);
-    expect(enginePlaybackRate(12000)).toBeCloseTo(1.06);
+    expect(enginePlaybackRate(-100)).toBeCloseTo(.88);
+    expect(enginePlaybackRate(12000)).toBeCloseTo(1.16);
   });
 
   it('crossfades neighboring steady RPM recordings without replaying a rev sweep', () => {
@@ -52,9 +53,18 @@ describe('sample-driven vehicle mix', () => {
     expect(redline.weights[5]).toBeCloseTo(1);
     expect(midrange.weights.filter(weight => weight > 0)).toHaveLength(2);
     for (const profile of [idle, midrange, redline]) {
-      expect(profile.weights.reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1);
-      expect(profile.rates.every(rate => rate >= .9 && rate <= 1.12)).toBe(true);
+      expect(profile.weights.reduce((sum, weight) => sum + weight * weight, 0)).toBeCloseTo(1);
+      expect(profile.rates.every(rate => rate >= .84 && rate <= 1.18)).toBe(true);
     }
+  });
+
+  it('makes throttle and rising RPM clearly louder than idle', () => {
+    const idle = engineVolumeProfile(900, 0);
+    const cruising = engineVolumeProfile(3200, .28);
+    const accelerating = engineVolumeProfile(6200, 1);
+    expect(idle).toBeGreaterThanOrEqual(.1);
+    expect(cruising).toBeGreaterThan(idle);
+    expect(accelerating).toBeGreaterThan(cruising * 2);
   });
 
   it('layers a stronger screech over scrub for a fast handbrake drift', () => {

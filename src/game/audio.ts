@@ -45,7 +45,7 @@ export function resolveTrafficHornUrl(baseUri: string): string {
 
 export function enginePlaybackRate(rpm: number): number {
   const normalized = Math.min(1, Math.max(0, (rpm - 900) / 6900));
-  return .94 + normalized * .12;
+  return .88 + normalized * .28;
 }
 
 export function engineMixProfile(rpm: number): {
@@ -57,9 +57,19 @@ export function engineMixProfile(rpm: number): {
   const rawWeights = centers.map(center => Math.max(0, 1 - Math.abs(normalized - center) / .2));
   const total = rawWeights.reduce((sum, weight) => sum + weight, 0) || 1;
   return {
-    weights: rawWeights.map(weight => weight / total),
-    rates: centers.map(center => Math.min(1.12, Math.max(.9, 1 + (normalized - center) * .32))),
+    // Square-root gain preserves equal perceived power while two adjacent
+    // recordings overlap, avoiding a quiet dip halfway between RPM bands.
+    weights: rawWeights.map(weight => Math.sqrt(weight / total)),
+    // Each fixed-RPM recording bends upward within its band. The next sample
+    // crossfades in before the bend becomes artificial or "chipmunked."
+    rates: centers.map(center => Math.min(1.18, Math.max(.84, 1 + (normalized - center) * .82))),
   };
+}
+
+export function engineVolumeProfile(rpm: number, throttle: number, coasting = false): number {
+  const normalizedRpm = Math.min(1, Math.max(0, (rpm - 900) / 6900));
+  const normalizedThrottle = Math.min(1, Math.max(0, throttle));
+  return .105 + normalizedThrottle * .285 + normalizedRpm * .055 + (coasting ? .018 : 0);
 }
 
 export function speedAudioProfile(speedMph: number): { wind: number; musicHighpassHz: number } {
@@ -333,10 +343,10 @@ export class GameAudio {
     const run = running ? 1 : 0;
 
     const engine = engineMixProfile(state.rpm);
-    const engineLevel = .052 + state.throttle * .175 + rpm * .025 + coast * .012;
+    const engineLevel = engineVolumeProfile(state.rpm, state.throttle, coast > 0);
     for (let index = 0; index < this.engineSources.length; index += 1) {
       this.engineSources[index].playbackRate.setTargetAtTime(engine.rates[index] ?? 1, now, .045);
-      this.engineFilters[index].frequency.setTargetAtTime(1450 + rpm * 2850 + state.throttle * 1250, now, .06);
+      this.engineFilters[index].frequency.setTargetAtTime(1750 + rpm * 3300 + state.throttle * 1550, now, .055);
       this.engineGains[index].gain.setTargetAtTime(
         run * shifting * (engine.weights[index] ?? 0) * engineLevel,
         now,
