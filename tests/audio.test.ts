@@ -37,23 +37,24 @@ describe('hosted music path', () => {
 
 describe('sample-driven vehicle mix', () => {
   it('tracks engine RPM continuously and clamps playback outside the rev range', () => {
-    expect(enginePlaybackRate(900)).toBeCloseTo(.72);
-    expect(enginePlaybackRate(7800)).toBeCloseTo(1.2);
+    expect(enginePlaybackRate(900)).toBeCloseTo(.94);
+    expect(enginePlaybackRate(7800)).toBeCloseTo(1.06);
     expect(enginePlaybackRate(4800)).toBeGreaterThan(enginePlaybackRate(2200));
-    expect(enginePlaybackRate(-100)).toBeCloseTo(.72);
-    expect(enginePlaybackRate(12000)).toBeCloseTo(1.2);
+    expect(enginePlaybackRate(-100)).toBeCloseTo(.94);
+    expect(enginePlaybackRate(12000)).toBeCloseTo(1.06);
   });
 
-  it('crossfades from low engine body to the high-rev JDM layer', () => {
+  it('crossfades neighboring steady RPM recordings without replaying a rev sweep', () => {
     const idle = engineMixProfile(900);
     const midrange = engineMixProfile(4300);
     const redline = engineMixProfile(7800);
-    expect(idle.low).toBe(1);
-    expect(idle.high).toBe(0);
-    expect(midrange.mid).toBeGreaterThan(idle.mid);
-    expect(redline.high).toBe(1);
-    expect(redline.low).toBe(0);
-    expect(redline.highRate).toBeGreaterThan(midrange.highRate);
+    expect(idle.weights[0]).toBeCloseTo(1);
+    expect(redline.weights[5]).toBeCloseTo(1);
+    expect(midrange.weights.filter(weight => weight > 0)).toHaveLength(2);
+    for (const profile of [idle, midrange, redline]) {
+      expect(profile.weights.reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1);
+      expect(profile.rates.every(rate => rate >= .9 && rate <= 1.12)).toBe(true);
+    }
   });
 
   it('layers a stronger screech over scrub for a fast handbrake drift', () => {
@@ -73,7 +74,7 @@ describe('speed-dependent atmosphere', () => {
     const thresholdSpeed = speedAudioProfile(95);
     const highwaySpeed = speedAudioProfile(110);
     const extremeSpeed = speedAudioProfile(165);
-    expect(citySpeed.wind).toBe(0);
+    expect(citySpeed.wind).toBeGreaterThan(0);
     expect(citySpeed.musicHighpassHz).toBe(620);
     expect(thresholdSpeed.musicHighpassHz).toBe(620);
     expect(highwaySpeed.wind).toBeGreaterThan(0);
