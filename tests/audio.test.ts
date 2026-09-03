@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SOUND_FILES,
+  engineMixProfile,
   enginePlaybackRate,
   resolveMusicUrl,
   resolveSoundUrl,
@@ -36,11 +37,23 @@ describe('hosted music path', () => {
 
 describe('sample-driven vehicle mix', () => {
   it('tracks engine RPM continuously and clamps playback outside the rev range', () => {
-    expect(enginePlaybackRate(900)).toBeCloseTo(.78);
-    expect(enginePlaybackRate(7800)).toBeCloseTo(2.33);
+    expect(enginePlaybackRate(900)).toBeCloseTo(.72);
+    expect(enginePlaybackRate(7800)).toBeCloseTo(1.2);
     expect(enginePlaybackRate(4800)).toBeGreaterThan(enginePlaybackRate(2200));
-    expect(enginePlaybackRate(-100)).toBeCloseTo(.78);
-    expect(enginePlaybackRate(12000)).toBeCloseTo(2.33);
+    expect(enginePlaybackRate(-100)).toBeCloseTo(.72);
+    expect(enginePlaybackRate(12000)).toBeCloseTo(1.2);
+  });
+
+  it('crossfades from low engine body to the high-rev JDM layer', () => {
+    const idle = engineMixProfile(900);
+    const midrange = engineMixProfile(4300);
+    const redline = engineMixProfile(7800);
+    expect(idle.low).toBe(1);
+    expect(idle.high).toBe(0);
+    expect(midrange.mid).toBeGreaterThan(idle.mid);
+    expect(redline.high).toBe(1);
+    expect(redline.low).toBe(0);
+    expect(redline.highRate).toBeGreaterThan(midrange.highRate);
   });
 
   it('layers a stronger screech over scrub for a fast handbrake drift', () => {
@@ -72,8 +85,8 @@ describe('speed-dependent atmosphere', () => {
   it('keeps every completed pass audible and strengthens close fast passes', () => {
     const distantSlowPass = trafficPassProfile(1, 14.5);
     const closeFastPass = trafficPassProfile(32, 2.2);
-    expect(distantSlowPass.airGain).toBeGreaterThanOrEqual(.11);
-    expect(distantSlowPass.bodyGain).toBeGreaterThanOrEqual(.045);
+    expect(distantSlowPass.airGain).toBeGreaterThanOrEqual(.2);
+    expect(distantSlowPass.bodyGain).toBeGreaterThanOrEqual(.1);
     expect(closeFastPass.airGain).toBeGreaterThan(distantSlowPass.airGain);
     expect(closeFastPass.bodyGain).toBeGreaterThan(distantSlowPass.bodyGain);
     expect(closeFastPass.duration).toBeLessThan(distantSlowPass.duration);

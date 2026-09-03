@@ -2,13 +2,13 @@
 
 All sound effects listed below are released under [Creative Commons CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). CC0 permits copying, modification, redistribution, and commercial game use without attribution. Credits are retained here as a courtesy and as a durable record of each asset's origin.
 
-The files in `public/audio` are stored with the game so production audio does not depend on third-party hosting. Runtime pitch shifting, filtering, gain envelopes, crossfades, stereo panning, and layering are performed by the Web Audio mix; the downloaded source files themselves are otherwise unchanged.
+The files in `public/audio` are stored with the game so production audio does not depend on third-party hosting. Runtime pitch shifting, filtering, gain envelopes, crossfades, stereo panning, and layering are performed by the Web Audio mix. The three JDM-inspired engine layers are edited excerpts of the credited CC0 field recordings; other downloaded source files are unchanged.
 
 ## Vehicle and environment recordings
 
 | Local file | Source and creator | Use in game |
 | --- | --- | --- |
-| `engine-loop.wav` | [CarEngines](https://github.com/buntine/CarEngines), buntine | RPM-driven intake/exhaust engine loop |
+| `jdm-engine-low.wav`, `jdm-engine-mid.wav`, `jdm-engine-high.wav` | [Performance Cars](https://muted.io/performance-cars/), muted.io — edited from pack recordings 018, 055, and 057 | Crossfaded low, mid, and high-RPM layers for the JDM-inspired engine mix |
 | `engine-start.wav` | [Car engine start 01](https://opengameart.org/content/car-engine-start-01), looneybits | Ignition at the beginning of a run |
 | `tire-screech.ogg` | [Screeching tires #2](https://bigsoundbank.com/screeching-tires-2-s2369.html), Dorian CLAIR | High-slip and handbrake tire layer |
 | `tire-scrub.ogg` | [Tire squeal](https://bigsoundbank.com/tire-squeal-s0500.html), Joseph SARDIN | Low/mid-slip scrub and service-brake layer |
