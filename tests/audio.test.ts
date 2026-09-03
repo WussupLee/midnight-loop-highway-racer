@@ -47,7 +47,7 @@ describe('sample-driven vehicle mix', () => {
     expect(enginePlaybackRate(12000)).toBeCloseTo(1.48);
   });
 
-  it('provides three validated engine choices with distinct rising pitch curves', () => {
+  it('provides five validated engine choices with distinct rising pitch curves', () => {
     expect(ENGINE_OPTIONS).toEqual(['street-sedan', '4age-intake', '4age-exhaust', 'performance-gt', 'track-high-rev']);
     for (const option of ENGINE_OPTIONS) {
       expect(isEngineOption(option)).toBe(true);
