@@ -11,6 +11,8 @@ The files in `public/audio` are stored with the game so production audio does no
 | `engine-street-sedan.mp3` | [Sedan engine loop](https://freesound.org/people/Dmitry_mansurev64/sounds/748027/), Dmitry_mansurev64 | Selectable smooth street-sedan engine profile |
 | `engine-4age-intake.mp3` | [4A-GE Engine Loop 1](https://freesound.org/people/qopsinonstudios/sounds/509626/), qopsinonstudios | Selectable Toyota 4A-GE intake-focused profile |
 | `engine-4age-exhaust.mp3` | [4A-GE Engine Loop 2](https://freesound.org/people/qopsinonstudios/sounds/509627/), qopsinonstudios | Selectable Toyota 4A-GE exhaust-focused profile |
+| `engine-performance-gt.wav` | [Performance Cars sample pack](https://muted.io/performance-cars/), muted.io, recording 022 | Selectable smooth performance-GT profile; stable section edited into a normalized seamless loop |
+| `engine-track-high-rev.wav` | [Performance Cars sample pack](https://muted.io/performance-cars/), muted.io, recording 061 | Selectable bright high-rev track profile; stable section edited into a normalized seamless loop |
 | `engine-start.wav` | [Car engine start 01](https://opengameart.org/content/car-engine-start-01), looneybits | Ignition at the beginning of a run |
 | `tire-screech.ogg` | [Screeching tires #2](https://bigsoundbank.com/screeching-tires-2-s2369.html), Dorian CLAIR | High-slip and handbrake tire layer |
 | `tire-scrub.ogg` | [Tire squeal](https://bigsoundbank.com/tire-squeal-s0500.html), Joseph SARDIN | Low/mid-slip scrub and service-brake layer |

@@ -48,13 +48,14 @@ describe('sample-driven vehicle mix', () => {
   });
 
   it('provides three validated engine choices with distinct rising pitch curves', () => {
-    expect(ENGINE_OPTIONS).toEqual(['street-sedan', '4age-intake', '4age-exhaust']);
+    expect(ENGINE_OPTIONS).toEqual(['street-sedan', '4age-intake', '4age-exhaust', 'performance-gt', 'track-high-rev']);
     for (const option of ENGINE_OPTIONS) {
       expect(isEngineOption(option)).toBe(true);
       expect(enginePlaybackRate(7800, option)).toBeGreaterThan(enginePlaybackRate(900, option));
     }
     expect(isEngineOption('diesel-truck')).toBe(false);
-    expect(new Set(ENGINE_OPTIONS.map(option => enginePlaybackRate(7800, option))).size).toBe(3);
+    expect(new Set(ENGINE_OPTIONS.map(option => enginePlaybackRate(7800, option))).size).toBe(5);
+    expect(enginePlaybackRate(7800, 'track-high-rev')).toBeGreaterThan(enginePlaybackRate(7800, 'performance-gt'));
   });
 
   it('makes throttle and rising RPM clearly louder than idle', () => {

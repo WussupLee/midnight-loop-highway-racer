@@ -4,6 +4,8 @@ export const SOUND_FILES = {
   engineStreetSedan: 'engine-street-sedan.mp3',
   engine4ageIntake: 'engine-4age-intake.mp3',
   engine4ageExhaust: 'engine-4age-exhaust.mp3',
+  enginePerformanceGt: 'engine-performance-gt.wav',
+  engineTrackHighRev: 'engine-track-high-rev.wav',
   engineStart: 'engine-start.wav',
   tireScreech: 'tire-screech.ogg',
   tireScrub: 'tire-scrub.ogg',
@@ -28,14 +30,31 @@ export const SOUND_FILES = {
 
 type SoundId = keyof typeof SOUND_FILES;
 
-export const ENGINE_OPTIONS = ['street-sedan', '4age-intake', '4age-exhaust'] as const;
+export const ENGINE_OPTIONS = ['street-sedan', '4age-intake', '4age-exhaust', 'performance-gt', 'track-high-rev'] as const;
 export type EngineOption = typeof ENGINE_OPTIONS[number];
 
 const ENGINE_SOUND_IDS: Record<EngineOption, SoundId> = {
   'street-sedan': 'engineStreetSedan',
   '4age-intake': 'engine4ageIntake',
   '4age-exhaust': 'engine4ageExhaust',
+  'performance-gt': 'enginePerformanceGt',
+  'track-high-rev': 'engineTrackHighRev',
 };
+
+const ENGINE_PROFILE = {
+  'street-sedan': { rateFloor: .7, rateRange: .78, toneBase: 1850, toneRange: 3300, throttleTone: 1450, trim: 1.04 },
+  '4age-intake': { rateFloor: .66, rateRange: .94, toneBase: 2350, toneRange: 3300, throttleTone: 1450, trim: .86 },
+  '4age-exhaust': { rateFloor: .68, rateRange: .88, toneBase: 2050, toneRange: 3300, throttleTone: 1450, trim: .78 },
+  'performance-gt': { rateFloor: .72, rateRange: .72, toneBase: 2150, toneRange: 2850, throttleTone: 1050, trim: .9 },
+  'track-high-rev': { rateFloor: .62, rateRange: 1.04, toneBase: 2750, toneRange: 3900, throttleTone: 1700, trim: .84 },
+} as const satisfies Record<EngineOption, {
+  rateFloor: number;
+  rateRange: number;
+  toneBase: number;
+  toneRange: number;
+  throttleTone: number;
+  trim: number;
+}>;
 
 export function isEngineOption(value: string | null): value is EngineOption {
   return ENGINE_OPTIONS.includes(value as EngineOption);
@@ -55,12 +74,8 @@ export function resolveTrafficHornUrl(baseUri: string): string {
 
 export function enginePlaybackRate(rpm: number, option: EngineOption = 'street-sedan'): number {
   const normalized = Math.min(1, Math.max(0, (rpm - 900) / 6900));
-  const curve = option === 'street-sedan'
-    ? { floor: .7, range: .78 }
-    : option === '4age-intake'
-      ? { floor: .66, range: .94 }
-      : { floor: .68, range: .88 };
-  return curve.floor + normalized * curve.range;
+  const profile = ENGINE_PROFILE[option];
+  return profile.rateFloor + normalized * profile.rateRange;
 }
 
 export function engineVolumeProfile(rpm: number, throttle: number, coasting = false): number {
@@ -196,7 +211,7 @@ export class GameAudio {
       duration: 1.05,
       offset: .12,
       filterType: 'lowpass',
-      filterHz: option === 'street-sedan' ? 4100 : 5200,
+      filterHz: ENGINE_PROFILE[option].toneBase + 2500,
       attack: .035,
     });
   }
@@ -472,12 +487,15 @@ export class GameAudio {
     for (let index = 0; index < this.engineSources.length; index += 1) {
       const option = ENGINE_OPTIONS[index];
       const selected = option === this.engineOption ? 1 : 0;
-      const toneBase = option === 'street-sedan' ? 1850 : option === '4age-intake' ? 2350 : 2050;
-      const trim = option === 'street-sedan' ? 1.04 : option === '4age-intake' ? .86 : .78;
+      const profile = ENGINE_PROFILE[option];
       this.engineSources[index].playbackRate.setTargetAtTime(enginePlaybackRate(state.rpm, option), now, .055);
-      this.engineFilters[index].frequency.setTargetAtTime(toneBase + rpm * 3300 + state.throttle * 1450, now, .06);
+      this.engineFilters[index].frequency.setTargetAtTime(
+        profile.toneBase + rpm * profile.toneRange + state.throttle * profile.throttleTone,
+        now,
+        .06,
+      );
       this.engineGains[index].gain.setTargetAtTime(
-        run * shifting * selected * trim * engineLevel,
+        run * shifting * selected * profile.trim * engineLevel,
         now,
         selected ? (state.throttle > .2 ? .045 : .09) : .12,
       );
