@@ -1,11 +1,44 @@
 import type { VehicleState } from './vehicle';
 
+export const SOUND_FILES = {
+  engineLoop: 'engine-loop.wav',
+  engineStart: 'engine-start.wav',
+  tireScreech: 'tire-screech.ogg',
+  tireScrub: 'tire-scrub.ogg',
+  roadRoll: 'road-roll.ogg',
+  windLoop: 'wind-loop.ogg',
+  boostLaunch: 'boost-launch.mp3',
+  boostWhoosh: 'boost-whoosh.ogg',
+  trafficPass: 'traffic-car-pass.ogg',
+  trafficHorn: 'traffic-car-horn.ogg',
+  crashBody: 'crash-body.ogg',
+  crashMetalHeavy: 'crash-metal-heavy.ogg',
+  crashMetalSheet: 'crash-metal-sheet.ogg',
+  crashDebris: 'crash-debris.ogg',
+  gearShift: 'gear-shift-clunk.ogg',
+  uiClick: 'ui-click.ogg',
+  rewardNearMiss: 'reward-near-miss.ogg',
+  rewardPerfect: 'reward-perfect.ogg',
+  rewardDrift: 'reward-drift.ogg',
+} as const;
+
+type SoundId = keyof typeof SOUND_FILES;
+
 export function resolveMusicUrl(baseUri: string): string {
   return new URL('audio/midnight-loop-background.mp3', baseUri).href;
 }
 
+export function resolveSoundUrl(sound: SoundId, baseUri: string): string {
+  return new URL(`audio/${SOUND_FILES[sound]}`, baseUri).href;
+}
+
 export function resolveTrafficHornUrl(baseUri: string): string {
-  return new URL('audio/traffic-car-horn.ogg', baseUri).href;
+  return resolveSoundUrl('trafficHorn', baseUri);
+}
+
+export function enginePlaybackRate(rpm: number): number {
+  const normalized = Math.min(1, Math.max(0, (rpm - 900) / 6900));
+  return .78 + normalized * 1.55;
 }
 
 export function speedAudioProfile(speedMph: number): { wind: number; musicHighpassHz: number } {
@@ -18,55 +51,102 @@ export function speedAudioProfile(speedMph: number): { wind: number; musicHighpa
   };
 }
 
+export function tireAudioProfile(
+  tireSlip: number,
+  speedMps: number,
+  handbrakeActive: boolean,
+  brake: number,
+): { scrub: number; screech: number } {
+  const speed = Math.min(1, Math.max(0, (speedMps - 4) / 36));
+  const slip = Math.max(0, tireSlip - .055);
+  const handbrake = handbrakeActive ? Math.min(1, speedMps / 18) : 0;
+  const serviceBrake = brake * Math.min(1, speedMps / 28);
+  return {
+    scrub: Math.min(1, (slip * .72 + handbrake * .42 + serviceBrake * .16) * speed),
+    screech: Math.min(1, (Math.max(0, slip - .18) * .9 + handbrake * .66 + Math.max(0, serviceBrake - .62) * .3) * speed),
+  };
+}
+
 export function trafficPassProfile(relativeSpeed: number, lateralDistance: number): { duration: number; airGain: number; bodyGain: number } {
   const speed = Math.min(1, Math.max(0, (relativeSpeed - .5) / 34));
   const proximity = 1 - Math.min(1, Math.max(0, (lateralDistance - 1.8) / 13));
   return {
-    duration: .52 - speed * .23,
-    airGain: .11 + speed * .18 + proximity * .1,
-    bodyGain: .045 + speed * .085 + proximity * .055,
+    duration: .72 - speed * .29,
+    airGain: .108 + speed * .16 + proximity * .09,
+    bodyGain: .05 + speed * .08 + proximity * .05,
   };
+}
+
+interface PlayOptions {
+  volume: number;
+  rate?: number;
+  pan?: number;
+  delay?: number;
+  duration?: number;
+  offset?: number;
+  filterType?: BiquadFilterType;
+  filterHz?: number;
+  filterQ?: number;
+  attack?: number;
 }
 
 export class GameAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
-  private engineGain: GainNode | null = null;
-  private engineA: OscillatorNode | null = null;
-  private engineB: OscillatorNode | null = null;
-  private windGain: GainNode | null = null;
-  private windFilter: BiquadFilterNode | null = null;
-  private tireGain: GainNode | null = null;
-  private tireTone: OscillatorNode | null = null;
-  private tireToneGain: GainNode | null = null;
-  private roadGain: GainNode | null = null;
-  private brakeGain: GainNode | null = null;
-  private boostGain: GainNode | null = null;
-  private boostBassGain: GainNode | null = null;
-  private boostFilter: BiquadFilterNode | null = null;
-  private boostBassFilter: BiquadFilterNode | null = null;
   private music: HTMLAudioElement | null = null;
   private musicGain: GainNode | null = null;
   private musicHighpass: BiquadFilterNode | null = null;
-  private trafficHornBuffer: AudioBuffer | null = null;
+  private buffers = new Map<SoundId, AudioBuffer>();
+  private assetPromise: Promise<void> | null = null;
+
+  private engineSource: AudioBufferSourceNode | null = null;
+  private engineIntakeFilter: BiquadFilterNode | null = null;
+  private engineExhaustFilter: BiquadFilterNode | null = null;
+  private engineIntakeGain: GainNode | null = null;
+  private engineExhaustGain: GainNode | null = null;
+  private roadSource: AudioBufferSourceNode | null = null;
+  private roadFilter: BiquadFilterNode | null = null;
+  private roadGain: GainNode | null = null;
+  private windSource: AudioBufferSourceNode | null = null;
+  private windFilter: BiquadFilterNode | null = null;
+  private windGain: GainNode | null = null;
+  private boostSource: AudioBufferSourceNode | null = null;
+  private boostFilter: BiquadFilterNode | null = null;
+  private boostGain: GainNode | null = null;
+  private tireScrubSource: AudioBufferSourceNode | null = null;
+  private tireScrubFilter: BiquadFilterNode | null = null;
+  private tireScrubGain: GainNode | null = null;
+  private tireScreechSource: AudioBufferSourceNode | null = null;
+  private tireScreechFilter: BiquadFilterNode | null = null;
+  private tireScreechGain: GainNode | null = null;
+
   private muted = false;
   private lastThrottle = 0;
+  private lastBrake = 0;
   private lastBoostActive = false;
   private lastHornAt = -10;
+  private shiftDuckUntil = -1;
 
-  async start(): Promise<void> {
+  async start(playIgnition = false): Promise<void> {
     if (this.context) {
       await this.context.resume();
       await this.playMusic();
+      await this.assetPromise;
+      if (playIgnition) this.playBuffer('engineStart', { volume: .32, filterType: 'lowpass', filterHz: 4200 });
       return;
     }
+
     this.context = new AudioContext();
     this.master = this.context.createGain();
-    this.master.gain.value = .68;
-    this.master.connect(this.context.destination);
+    this.master.gain.value = .72;
+    const compressor = this.context.createDynamicsCompressor();
+    compressor.threshold.value = -18;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 4;
+    compressor.attack.value = .003;
+    compressor.release.value = .18;
+    this.master.connect(compressor).connect(this.context.destination);
 
-    // Resolve against the current document directory, not the domain root.
-    // This works at localhost and under the GitHub Pages repository subpath.
     this.music = new Audio(resolveMusicUrl(document.baseURI));
     this.music.loop = true;
     this.music.preload = 'auto';
@@ -77,76 +157,115 @@ export class GameAudio {
     this.musicHighpass.frequency.value = 20;
     this.musicHighpass.Q.value = .58;
     this.musicGain = this.context.createGain();
-    this.musicGain.gain.value = .34;
+    this.musicGain.gain.value = .31;
     musicSource.connect(this.musicHighpass).connect(this.musicGain).connect(this.master);
-    // Invoke play while the Start Run click still owns browser user activation;
-    // the rest of the procedural audio graph can finish constructing after it.
+
+    // Keep playback inside the initiating click; browsers may reject it after
+    // the asynchronous sample fetches complete.
     const musicPlayback = this.playMusic();
-    const hornLoading = this.loadTrafficHorn();
-
-    const engineFilter = this.context.createBiquadFilter();
-    engineFilter.type = 'lowpass';
-    engineFilter.frequency.value = 1550;
-    engineFilter.Q.value = 1.2;
-    this.engineGain = this.context.createGain();
-    this.engineGain.gain.value = 0;
-    this.engineA = this.context.createOscillator();
-    this.engineA.type = 'sawtooth';
-    this.engineB = this.context.createOscillator();
-    this.engineB.type = 'triangle';
-    const aGain = this.context.createGain(); aGain.gain.value = .1;
-    const bGain = this.context.createGain(); bGain.gain.value = .2;
-    this.engineA.connect(aGain).connect(engineFilter);
-    this.engineB.connect(bGain).connect(engineFilter);
-    engineFilter.connect(this.engineGain).connect(this.master);
-    this.engineA.start(); this.engineB.start();
-
-    const noiseBuffer = this.createNoise(3);
-    const windSource = this.context.createBufferSource();
-    windSource.buffer = noiseBuffer; windSource.loop = true;
-    this.windFilter = this.context.createBiquadFilter(); this.windFilter.type = 'bandpass'; this.windFilter.frequency.value = 1100; this.windFilter.Q.value = .5;
-    this.windGain = this.context.createGain(); this.windGain.gain.value = 0;
-    windSource.connect(this.windFilter).connect(this.windGain).connect(this.master); windSource.start();
-    const tireSource = this.context.createBufferSource(); tireSource.buffer = noiseBuffer; tireSource.loop = true;
-    const tireFilter = this.context.createBiquadFilter(); tireFilter.type = 'bandpass'; tireFilter.frequency.value = 2100; tireFilter.Q.value = 2.4;
-    this.tireGain = this.context.createGain(); this.tireGain.gain.value = 0;
-    tireSource.connect(tireFilter).connect(this.tireGain).connect(this.master); tireSource.start();
-    this.tireTone = this.context.createOscillator(); this.tireTone.type = 'triangle'; this.tireTone.frequency.value = 720;
-    const tireToneFilter = this.context.createBiquadFilter(); tireToneFilter.type = 'bandpass'; tireToneFilter.frequency.value = 980; tireToneFilter.Q.value = 2.8;
-    this.tireToneGain = this.context.createGain(); this.tireToneGain.gain.value = 0;
-    this.tireTone.connect(tireToneFilter).connect(this.tireToneGain).connect(this.master); this.tireTone.start();
-
-    const roadSource = this.context.createBufferSource(); roadSource.buffer = noiseBuffer; roadSource.loop = true;
-    const roadFilter = this.context.createBiquadFilter(); roadFilter.type = 'lowpass'; roadFilter.frequency.value = 430; roadFilter.Q.value = .7;
-    this.roadGain = this.context.createGain(); this.roadGain.gain.value = 0;
-    roadSource.connect(roadFilter).connect(this.roadGain).connect(this.master); roadSource.start();
-
-    const brakeSource = this.context.createBufferSource(); brakeSource.buffer = noiseBuffer; brakeSource.loop = true;
-    const brakeFilter = this.context.createBiquadFilter(); brakeFilter.type = 'bandpass'; brakeFilter.frequency.value = 2850; brakeFilter.Q.value = 3.8;
-    this.brakeGain = this.context.createGain(); this.brakeGain.gain.value = 0;
-    brakeSource.connect(brakeFilter).connect(this.brakeGain).connect(this.master); brakeSource.start();
-
-    const boostSource = this.context.createBufferSource(); boostSource.buffer = noiseBuffer; boostSource.loop = true;
-    this.boostFilter = this.context.createBiquadFilter(); this.boostFilter.type = 'bandpass'; this.boostFilter.frequency.value = 1850; this.boostFilter.Q.value = .72;
-    this.boostGain = this.context.createGain(); this.boostGain.gain.value = 0;
-    boostSource.connect(this.boostFilter).connect(this.boostGain).connect(this.master); boostSource.start();
-    const boostBassSource = this.context.createBufferSource(); boostBassSource.buffer = noiseBuffer; boostBassSource.loop = true;
-    this.boostBassFilter = this.context.createBiquadFilter(); this.boostBassFilter.type = 'lowpass'; this.boostBassFilter.frequency.value = 185; this.boostBassFilter.Q.value = 1.15;
-    this.boostBassGain = this.context.createGain(); this.boostBassGain.gain.value = 0;
-    boostBassSource.connect(this.boostBassFilter).connect(this.boostBassGain).connect(this.master); boostBassSource.start();
-
-    await Promise.all([musicPlayback, hornLoading]);
+    this.assetPromise = this.loadAssets().then(() => this.startContinuousLayers());
+    await Promise.all([musicPlayback, this.assetPromise]);
+    if (playIgnition) this.playBuffer('engineStart', { volume: .32, filterType: 'lowpass', filterHz: 4200 });
   }
 
-  private async loadTrafficHorn(): Promise<void> {
-    if (!this.context || this.trafficHornBuffer) return;
-    try {
-      const response = await fetch(resolveTrafficHornUrl(document.baseURI), { cache: 'force-cache' });
-      if (!response.ok) return;
-      this.trafficHornBuffer = await this.context.decodeAudioData(await response.arrayBuffer());
-    } catch {
-      // Horns are optional ambience; a failed asset request must not interrupt a run.
+  private async loadAssets(): Promise<void> {
+    if (!this.context) return;
+    await Promise.all((Object.keys(SOUND_FILES) as SoundId[]).map(async (sound) => {
+      try {
+        const response = await fetch(resolveSoundUrl(sound, document.baseURI), { cache: 'force-cache' });
+        if (!response.ok || !this.context) return;
+        const buffer = await this.context.decodeAudioData(await response.arrayBuffer());
+        this.buffers.set(sound, buffer);
+      } catch {
+        // A missing optional layer should never interrupt a run. Other loaded
+        // recordings continue to provide the mix.
+      }
+    }));
+  }
+
+  private makeLoop(sound: SoundId, destination: AudioNode, startOffset = 0): AudioBufferSourceNode | null {
+    if (!this.context) return null;
+    const buffer = this.buffers.get(sound);
+    if (!buffer) return null;
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    if (buffer.duration > .18) {
+      source.loopStart = Math.min(startOffset, buffer.duration - .12);
+      source.loopEnd = Math.max(source.loopStart + .08, buffer.duration - .04);
     }
+    source.connect(destination);
+    source.start(this.context.currentTime, Math.min(startOffset, Math.max(0, buffer.duration - .05)));
+    return source;
+  }
+
+  private startContinuousLayers(): void {
+    if (!this.context || !this.master || this.engineSource) return;
+
+    this.engineIntakeFilter = this.context.createBiquadFilter();
+    this.engineIntakeFilter.type = 'lowpass';
+    this.engineIntakeFilter.frequency.value = 1600;
+    this.engineIntakeFilter.Q.value = 1.15;
+    this.engineExhaustFilter = this.context.createBiquadFilter();
+    this.engineExhaustFilter.type = 'bandpass';
+    this.engineExhaustFilter.frequency.value = 290;
+    this.engineExhaustFilter.Q.value = .72;
+    this.engineIntakeGain = this.context.createGain();
+    this.engineIntakeGain.gain.value = 0;
+    this.engineExhaustGain = this.context.createGain();
+    this.engineExhaustGain.gain.value = 0;
+    this.engineIntakeFilter.connect(this.engineIntakeGain).connect(this.master);
+    this.engineExhaustFilter.connect(this.engineExhaustGain).connect(this.master);
+    this.engineSource = this.makeLoop('engineLoop', this.engineIntakeFilter, .035);
+    this.engineSource?.connect(this.engineExhaustFilter);
+
+    this.roadFilter = this.context.createBiquadFilter();
+    this.roadFilter.type = 'lowpass';
+    this.roadFilter.frequency.value = 620;
+    this.roadFilter.Q.value = .62;
+    this.roadGain = this.context.createGain();
+    this.roadGain.gain.value = 0;
+    this.roadFilter.connect(this.roadGain).connect(this.master);
+    // The source recording includes a long steady asphalt section after its
+    // start-up; looping inside it avoids replaying the ignition each cycle.
+    this.roadSource = this.makeLoop('roadRoll', this.roadFilter, 22);
+    if (this.roadSource?.buffer && this.roadSource.buffer.duration > 41) this.roadSource.loopEnd = 40;
+
+    this.windFilter = this.context.createBiquadFilter();
+    this.windFilter.type = 'bandpass';
+    this.windFilter.frequency.value = 1250;
+    this.windFilter.Q.value = .48;
+    this.windGain = this.context.createGain();
+    this.windGain.gain.value = 0;
+    this.windFilter.connect(this.windGain).connect(this.master);
+    this.windSource = this.makeLoop('windLoop', this.windFilter);
+
+    this.boostFilter = this.context.createBiquadFilter();
+    this.boostFilter.type = 'bandpass';
+    this.boostFilter.frequency.value = 1900;
+    this.boostFilter.Q.value = .65;
+    this.boostGain = this.context.createGain();
+    this.boostGain.gain.value = 0;
+    this.boostFilter.connect(this.boostGain).connect(this.master);
+    this.boostSource = this.makeLoop('windLoop', this.boostFilter, .41);
+
+    this.tireScrubFilter = this.context.createBiquadFilter();
+    this.tireScrubFilter.type = 'bandpass';
+    this.tireScrubFilter.frequency.value = 1850;
+    this.tireScrubFilter.Q.value = 1.45;
+    this.tireScrubGain = this.context.createGain();
+    this.tireScrubGain.gain.value = 0;
+    this.tireScrubFilter.connect(this.tireScrubGain).connect(this.master);
+    this.tireScrubSource = this.makeLoop('tireScrub', this.tireScrubFilter, 1.7);
+
+    this.tireScreechFilter = this.context.createBiquadFilter();
+    this.tireScreechFilter.type = 'bandpass';
+    this.tireScreechFilter.frequency.value = 2450;
+    this.tireScreechFilter.Q.value = 1.7;
+    this.tireScreechGain = this.context.createGain();
+    this.tireScreechGain.gain.value = 0;
+    this.tireScreechFilter.connect(this.tireScreechGain).connect(this.master);
+    this.tireScreechSource = this.makeLoop('tireScreech', this.tireScreechFilter, .08);
   }
 
   private async playMusic(): Promise<void> {
@@ -172,149 +291,191 @@ export class GameAudio {
     };
   }
 
-  private createNoise(seconds: number): AudioBuffer {
-    const context = this.context!;
-    const buffer = context.createBuffer(1, context.sampleRate * seconds, context.sampleRate);
-    const data = buffer.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < data.length; i += 1) {
-      const white = Math.random() * 2 - 1;
-      last = last * .82 + white * .18;
-      data[i] = last;
-    }
-    return buffer;
-  }
-
-  update(state: VehicleState, dt: number, running: boolean): void {
-    if (!this.context || !this.engineGain || !this.engineA || !this.engineB || !this.windGain || !this.windFilter || !this.tireGain || !this.tireTone || !this.tireToneGain || !this.roadGain || !this.brakeGain || !this.boostGain || !this.boostBassGain || !this.boostFilter || !this.boostBassFilter) return;
+  update(state: VehicleState, _dt: number, running: boolean): void {
+    if (!this.context) return;
     const now = this.context.currentTime;
-    const fundamental = 31 + state.rpm / 52;
-    this.engineA.frequency.setTargetAtTime(fundamental, now, .025);
-    this.engineB.frequency.setTargetAtTime(fundamental * 1.98, now, .035);
-    this.engineGain.gain.setTargetAtTime(running ? .15 + state.throttle * .15 + (state.boostActive ? .055 : 0) : .035, now, state.throttle > .2 ? .035 : .085);
-    const speedAudio = speedAudioProfile(state.speedMph);
-    this.windFilter.frequency.setTargetAtTime(900 + speedAudio.wind * 1500, now, .16);
-    this.windFilter.Q.setTargetAtTime(.48 + speedAudio.wind * .42, now, .18);
-    this.windGain.gain.setTargetAtTime(running ? speedAudio.wind * .38 : 0, now, .12);
-    this.musicHighpass?.frequency.setTargetAtTime(running ? speedAudio.musicHighpassHz : 20, now, .45);
-    const handbrakeBite = state.handbrakeActive && state.speedMps > 17 ? .34 : 0;
-    const squeal = (Math.max(0, state.tireSlip - .13) + handbrakeBite) * Math.min(1, state.speedMps / 24);
-    this.tireGain.gain.setTargetAtTime(running ? Math.min(.34, squeal * .26) : 0, now, .028);
-    this.tireTone.frequency.setTargetAtTime(620 + Math.min(760, state.speedMps * 8 + state.tireSlip * 250), now, .045);
-    this.tireToneGain.gain.setTargetAtTime(running ? Math.min(.055, squeal * .043) : 0, now, .025);
+    const rpm = Math.min(1, Math.max(0, (state.rpm - 900) / 6900));
     const rolling = Math.min(1, state.speedMps / 58);
-    this.roadGain.gain.setTargetAtTime(running ? .018 + rolling * .085 : 0, now, .12);
-    this.brakeGain.gain.setTargetAtTime(running ? state.brake * rolling * .075 : 0, now, .035);
-    const boostLevel = running && state.boostActive ? 1 : 0;
-    this.boostFilter.frequency.setTargetAtTime(1450 + state.rpm * .11, now, .06);
-    this.boostBassFilter.frequency.setTargetAtTime(155 + state.throttle * 65, now, .08);
-    this.boostGain.gain.setTargetAtTime(boostLevel * .145, now, state.boostActive ? .025 : .075);
-    this.boostBassGain.gain.setTargetAtTime(boostLevel * .105, now, state.boostActive ? .035 : .11);
+    const shifting = now < this.shiftDuckUntil ? .22 : 1;
+    const coast = state.throttle < .09 && state.speedMps > 8 ? 1 : 0;
+    const run = running ? 1 : 0;
+
+    const rate = enginePlaybackRate(state.rpm);
+    this.engineSource?.playbackRate.setTargetAtTime(rate, now, .028);
+    this.engineIntakeFilter?.frequency.setTargetAtTime(780 + rpm * 2550 + state.throttle * 1050, now, .045);
+    this.engineExhaustFilter?.frequency.setTargetAtTime(190 + rpm * 680 + state.throttle * 140, now, .055);
+    this.engineIntakeGain?.gain.setTargetAtTime(run * shifting * (.105 + state.throttle * .19 + rpm * .055), now, state.throttle > .2 ? .032 : .085);
+    this.engineExhaustGain?.gain.setTargetAtTime(run * shifting * (.09 + state.throttle * .105 + coast * .052), now, .06);
+
+    const speedAudio = speedAudioProfile(state.speedMph);
+    this.windFilter?.frequency.setTargetAtTime(920 + speedAudio.wind * 1900, now, .14);
+    this.windFilter?.Q.setTargetAtTime(.43 + speedAudio.wind * .36, now, .17);
+    this.windGain?.gain.setTargetAtTime(run * speedAudio.wind * .285, now, .12);
+    this.musicHighpass?.frequency.setTargetAtTime(running ? speedAudio.musicHighpassHz : 20, now, .45);
+
+    this.roadSource?.playbackRate.setTargetAtTime(.84 + rolling * .34, now, .16);
+    this.roadFilter?.frequency.setTargetAtTime(320 + rolling * 520, now, .18);
+    this.roadGain?.gain.setTargetAtTime(run * (.012 + rolling * .072), now, .13);
+
+    const tires = tireAudioProfile(state.tireSlip, state.speedMps, state.handbrakeActive, state.brake);
+    this.tireScrubSource?.playbackRate.setTargetAtTime(.82 + rolling * .24 + tires.scrub * .13, now, .055);
+    this.tireScrubFilter?.frequency.setTargetAtTime(1350 + rolling * 780 + tires.scrub * 420, now, .07);
+    this.tireScrubGain?.gain.setTargetAtTime(run * tires.scrub * .31, now, .035);
+    this.tireScreechSource?.playbackRate.setTargetAtTime(.88 + rolling * .18 + tires.screech * .12, now, .04);
+    this.tireScreechFilter?.frequency.setTargetAtTime(2050 + rolling * 850 + tires.screech * 310, now, .055);
+    this.tireScreechGain?.gain.setTargetAtTime(run * tires.screech * .38, now, .025);
+
+    const boost = run && state.boostActive ? 1 : 0;
+    this.boostFilter?.frequency.setTargetAtTime(1450 + rpm * 1850, now, .055);
+    this.boostSource?.playbackRate.setTargetAtTime(1.02 + rpm * .35, now, .06);
+    this.boostGain?.gain.setTargetAtTime(boost * .215, now, state.boostActive ? .025 : .09);
     if (running && state.boostActive && !this.lastBoostActive) {
-      this.noiseHit(.17, 135, .24);
-      this.noiseHit(.1, 1250, .18);
-      this.tone(47, .09, .28, 'sawtooth', .62);
+      this.playBuffer('boostLaunch', { volume: .27, filterType: 'lowpass', filterHz: 5200, attack: .008 });
+      this.playBuffer('boostWhoosh', { volume: .2, rate: 1.08, filterType: 'bandpass', filterHz: 1850, filterQ: .6, attack: .01 });
     }
     if (running && this.lastThrottle > .72 && state.throttle < .14 && state.rpm > 3600) {
-      this.tone(74 + state.rpm / 125, .027, .07, 'square', .42);
+      this.playBuffer('boostWhoosh', { volume: .08, rate: 1.35, duration: .22, offset: .08, filterType: 'highpass', filterHz: 1500, attack: .006 });
+    }
+    if (running && this.lastBrake < .58 && state.brake >= .58 && state.speedMps > 16) {
+      this.playBuffer('gearShift', { volume: .055, rate: .82, duration: .18, filterType: 'lowpass', filterHz: 1250, attack: .004 });
     }
     this.lastThrottle = state.throttle;
+    this.lastBrake = state.brake;
     this.lastBoostActive = running && state.boostActive;
   }
 
-  gearShift(): void { this.tone(92, .045, .08, 'sawtooth'); }
-  nearMiss(perfect = false): void {
-    this.tone(perfect ? 880 : 660, .06, .17, 'sine', perfect ? 1.7 : 1.35);
-    this.noiseHit(.018, 3800, .12);
+  gearShift(fromGear = 1, toGear = 2, rpm = 5000): void {
+    if (!this.context) return;
+    const upshift = toGear > fromGear;
+    this.shiftDuckUntil = this.context.currentTime + (upshift ? .14 : .1);
+    this.playBuffer('gearShift', {
+      volume: upshift ? .14 : .1,
+      rate: .88 + Math.min(1, rpm / 7800) * .2 + (upshift ? 0 : -.08),
+      filterType: 'lowpass',
+      filterHz: upshift ? 3100 : 2200,
+      attack: .003,
+    });
   }
-  threadNeedle(): void { this.tone(523, .055, .26, 'triangle', 2); setTimeout(() => this.tone(784, .05, .2, 'sine', 1.25), 70); }
-  driftBonus(): void { this.tone(392, .045, .18, 'triangle', 1.5); setTimeout(() => this.tone(587, .035, .16, 'sine', 1.2), 65); }
-  collision(severity: number): void { this.noiseHit(Math.min(.32, .08 + severity * .004), 170 + severity * 5, .25); this.tone(48, Math.min(.25, severity * .004), .22, 'sawtooth', .45); }
+
+  nearMiss(perfect = false): void {
+    this.playBuffer(perfect ? 'rewardPerfect' : 'rewardNearMiss', {
+      volume: perfect ? .16 : .115,
+      rate: perfect ? 1.08 : 1.02,
+      filterType: 'highpass',
+      filterHz: 330,
+      attack: .005,
+    });
+  }
+
+  threadNeedle(): void {
+    this.playBuffer('rewardPerfect', { volume: .19, rate: 1.16, pan: -.16, filterType: 'highpass', filterHz: 280, attack: .004 });
+    this.playBuffer('rewardNearMiss', { volume: .11, rate: 1.42, pan: .2, delay: .075, filterType: 'highpass', filterHz: 520, attack: .004 });
+  }
+
+  driftBonus(): void {
+    this.playBuffer('rewardDrift', { volume: .15, rate: .96, filterType: 'highpass', filterHz: 220, attack: .006 });
+    this.playBuffer('rewardNearMiss', { volume: .065, rate: 1.24, delay: .055, pan: .12, filterType: 'highpass', filterHz: 540, attack: .004 });
+  }
+
+  collision(severity: number, scrape = false): void {
+    const strength = Math.min(1, Math.max(.12, severity / 36));
+    if (scrape) {
+      this.playBuffer('crashMetalSheet', { volume: .12 + strength * .16, rate: .78 + Math.random() * .16, duration: .34 + strength * .28, filterType: 'bandpass', filterHz: 1850, filterQ: .72, attack: .003 });
+      this.playBuffer('crashDebris', { volume: .05 + strength * .07, rate: 1.18, delay: .05, duration: .28, filterType: 'highpass', filterHz: 900, attack: .003 });
+      return;
+    }
+    this.playBuffer('crashBody', { volume: .17 + strength * .25, rate: .88 + strength * .12, filterType: 'lowpass', filterHz: 3900, attack: .002 });
+    this.playBuffer('crashMetalHeavy', { volume: .09 + strength * .19, rate: .82 + Math.random() * .22, delay: .018, filterType: 'bandpass', filterHz: 1120 + strength * 840, filterQ: .55, attack: .002 });
+  }
+
   trafficPass(side: number, relativeSpeed: number, lateralDistance = 4): void {
     if (!this.context || !this.master || relativeSpeed < .5) return;
+    const buffer = this.buffers.get('trafficPass');
+    if (!buffer) return;
     const now = this.context.currentTime;
     const profile = trafficPassProfile(relativeSpeed, lateralDistance);
-    const duration = profile.duration;
     const source = this.context.createBufferSource();
-    source.buffer = this.createNoise(duration + .04);
-    const filter = this.context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.setValueAtTime(2600 + Math.min(1500, relativeSpeed * 24), now); filter.frequency.exponentialRampToValueAtTime(520, now + duration); filter.Q.value = .58;
-    const gain = this.context.createGain(); gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(profile.airGain, now + duration * .38); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    const pan = this.context.createStereoPanner(); pan.pan.setValueAtTime(Math.sign(side) * .82, now); pan.pan.linearRampToValueAtTime(Math.sign(side) * .18, now + duration);
+    source.buffer = buffer;
+    const startRate = 1.08 + Math.min(.48, relativeSpeed * .011);
+    source.playbackRate.setValueAtTime(startRate, now);
+    source.playbackRate.exponentialRampToValueAtTime(Math.max(.68, startRate * .7), now + profile.duration);
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(3200 + Math.min(1200, relativeSpeed * 20), now);
+    filter.frequency.exponentialRampToValueAtTime(720, now + profile.duration);
+    filter.Q.value = .5;
+    const gain = this.context.createGain();
+    gain.gain.setValueAtTime(.0001, now);
+    gain.gain.exponentialRampToValueAtTime(profile.airGain, now + profile.duration * .37);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + profile.duration);
+    const pan = this.context.createStereoPanner();
+    pan.pan.setValueAtTime(Math.sign(side) * .86, now);
+    pan.pan.linearRampToValueAtTime(Math.sign(side) * .16, now + profile.duration);
     source.connect(filter).connect(gain).connect(pan).connect(this.master);
-    const bodyFilter = this.context.createBiquadFilter(); bodyFilter.type = 'lowpass'; bodyFilter.frequency.value = 390 + Math.min(420, relativeSpeed * 9); bodyFilter.Q.value = .7;
-    const bodyGain = this.context.createGain(); bodyGain.gain.setValueAtTime(.0001, now); bodyGain.gain.exponentialRampToValueAtTime(profile.bodyGain, now + duration * .42); bodyGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    const bodyPan = this.context.createStereoPanner(); bodyPan.pan.setValueAtTime(Math.sign(side) * .58, now); bodyPan.pan.linearRampToValueAtTime(0, now + duration);
-    source.connect(bodyFilter).connect(bodyGain).connect(bodyPan).connect(this.master);
-    const doppler = this.context.createOscillator(); doppler.type = 'triangle';
-    doppler.frequency.setValueAtTime(185 + Math.min(210, relativeSpeed * 4.5), now);
-    doppler.frequency.exponentialRampToValueAtTime(82, now + duration);
-    const dopplerGain = this.context.createGain(); dopplerGain.gain.setValueAtTime(.0001, now); dopplerGain.gain.exponentialRampToValueAtTime(profile.bodyGain * .38, now + duration * .34); dopplerGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    doppler.connect(dopplerGain).connect(bodyPan);
-    source.start(now); source.stop(now + duration + .03);
-    doppler.start(now); doppler.stop(now + duration + .03);
+    const offset = Math.min(Math.max(0, buffer.duration - profile.duration * startRate - .05), buffer.duration * .42);
+    source.start(now, offset, Math.min(buffer.duration - offset, profile.duration * startRate));
+    source.stop(now + profile.duration + .04);
+
+    this.playBuffer('boostWhoosh', {
+      volume: profile.bodyGain,
+      rate: .82 + Math.min(.35, relativeSpeed * .008),
+      pan: Math.sign(side) * .58,
+      duration: profile.duration,
+      filterType: 'lowpass',
+      filterHz: 680 + Math.min(560, relativeSpeed * 11),
+      filterQ: .55,
+      attack: profile.duration * .28,
+    });
     if (relativeSpeed > 8 && now - this.lastHornAt > 1.35 && Math.random() < .18) {
       this.lastHornAt = now;
-      this.trafficHorn(side, relativeSpeed);
+      this.playBuffer('trafficHorn', { volume: .16, rate: .98 + Math.min(.08, relativeSpeed * .0016), pan: Math.sign(side) * .66, filterType: 'lowpass', filterHz: 3250, attack: .012 });
     }
   }
 
-  private trafficHorn(side: number, relativeSpeed: number): void {
-    if (!this.context || !this.master || !this.trafficHornBuffer) return;
-    const now = this.context.currentTime;
-    const duration = Math.min(2.15, this.trafficHornBuffer.duration);
-    const source = this.context.createBufferSource();
-    source.buffer = this.trafficHornBuffer;
-    const initialRate = .98 + Math.min(.08, relativeSpeed * .0016);
-    source.playbackRate.setValueAtTime(initialRate, now);
-    source.playbackRate.exponentialRampToValueAtTime(initialRate * .91, now + duration);
-    const toneFilter = this.context.createBiquadFilter();
-    toneFilter.type = 'lowpass';
-    toneFilter.frequency.value = 2850 + Math.min(900, relativeSpeed * 18);
-    toneFilter.Q.value = .5;
-    const pan = this.context.createStereoPanner();
-    pan.pan.setValueAtTime(Math.sign(side) * .7, now);
-    pan.pan.linearRampToValueAtTime(Math.sign(side) * .28, now + duration);
-    const hornGain = this.context.createGain();
-    hornGain.gain.setValueAtTime(.0001, now);
-    hornGain.gain.exponentialRampToValueAtTime(.2, now + .018);
-    hornGain.gain.setValueAtTime(.2, now + Math.min(.11, duration * .35));
-    hornGain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    source.connect(toneFilter).connect(hornGain).connect(pan).connect(this.master);
-    source.start(now, 0, duration);
-    source.stop(now + duration + .02);
-  }
   crash(severity: number): void {
-    this.noiseHit(Math.min(.58, .34 + severity * .003), 105, .58);
-    this.noiseHit(Math.min(.42, .2 + severity * .002), 720, .42);
-    this.noiseHit(.23, 2450, .34);
-    this.noiseHit(.13, 6100, .2);
-    setTimeout(() => this.noiseHit(.17, 1750, .3), 42);
-    setTimeout(() => this.noiseHit(.1, 3900, .22), 96);
+    const strength = Math.min(1, Math.max(.35, severity / 68));
+    this.playBuffer('crashBody', { volume: .34 + strength * .2, rate: .82 + strength * .12, filterType: 'lowpass', filterHz: 4400, attack: .002 });
+    this.playBuffer('crashMetalHeavy', { volume: .23 + strength * .18, rate: .76 + Math.random() * .18, delay: .016, filterType: 'bandpass', filterHz: 980, filterQ: .48, attack: .002 });
+    this.playBuffer('crashMetalSheet', { volume: .16 + strength * .12, rate: .9 + Math.random() * .18, delay: .048, filterType: 'highpass', filterHz: 740, filterQ: .6, attack: .002 });
+    this.playBuffer('crashDebris', { volume: .12 + strength * .09, rate: 1.02, delay: .11, filterType: 'highpass', filterHz: 1350, attack: .003 });
   }
-  ui(): void { this.tone(410, .035, .055, 'square', 1.3); }
 
-  private tone(frequency: number, volume: number, duration: number, type: OscillatorType, endRatio = .7): void {
+  ui(): void {
+    this.playBuffer('uiClick', { volume: .105, rate: .98 + Math.random() * .06, filterType: 'highpass', filterHz: 260, attack: .002 });
+  }
+
+  private playBuffer(sound: SoundId, options: PlayOptions): void {
     if (!this.context || !this.master) return;
-    const now = this.context.currentTime;
-    const oscillator = this.context.createOscillator();
+    const buffer = this.buffers.get(sound);
+    if (!buffer) return;
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = Math.max(.25, options.rate ?? 1);
+    const filter = this.context.createBiquadFilter();
+    filter.type = options.filterType ?? 'allpass';
+    filter.frequency.value = options.filterHz ?? 1000;
+    filter.Q.value = options.filterQ ?? .7;
     const gain = this.context.createGain();
-    oscillator.type = type; oscillator.frequency.setValueAtTime(frequency, now); oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * endRatio), now + duration);
-    gain.gain.setValueAtTime(volume, now); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    oscillator.connect(gain).connect(this.master); oscillator.start(now); oscillator.stop(now + duration + .02);
-  }
+    const pan = this.context.createStereoPanner();
+    pan.pan.value = Math.min(1, Math.max(-1, options.pan ?? 0));
+    source.connect(filter).connect(gain).connect(pan).connect(this.master);
 
-  private noiseHit(volume: number, frequency: number, duration: number): void {
-    if (!this.context || !this.master) return;
-    const now = this.context.currentTime;
-    const source = this.context.createBufferSource(); source.buffer = this.createNoise(Math.max(.08, duration));
-    const filter = this.context.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = frequency; filter.Q.value = .8;
-    const gain = this.context.createGain(); gain.gain.setValueAtTime(volume, now); gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
-    source.connect(filter).connect(gain).connect(this.master); source.start(now); source.stop(now + duration + .02);
+    const startAt = this.context.currentTime + (options.delay ?? 0);
+    const offset = Math.min(Math.max(0, options.offset ?? 0), Math.max(0, buffer.duration - .01));
+    const rate = source.playbackRate.value;
+    const available = Math.max(.02, (buffer.duration - offset) / rate);
+    const audibleDuration = Math.min(available, options.duration ?? available);
+    const attack = Math.min(audibleDuration * .45, options.attack ?? .006);
+    gain.gain.setValueAtTime(.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0002, options.volume), startAt + Math.max(.001, attack));
+    gain.gain.exponentialRampToValueAtTime(.0001, startAt + audibleDuration);
+    source.start(startAt, offset, Math.min(buffer.duration - offset, audibleDuration * rate));
+    source.stop(startAt + audibleDuration + .025);
   }
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.master && this.context) this.master.gain.setTargetAtTime(this.muted ? 0 : .68, this.context.currentTime, .035);
+    if (this.master && this.context) this.master.gain.setTargetAtTime(this.muted ? 0 : .72, this.context.currentTime, .035);
     return this.muted;
   }
 }

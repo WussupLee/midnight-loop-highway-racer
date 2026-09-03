@@ -500,7 +500,7 @@ function setMode(next: GameMode): void {
 }
 
 function startRun(): void {
-  void audio.start();
+  void audio.start(true);
   if (mobileControlMode === 'tilt') void enableTiltSteering();
   audio.ui();
   configureRoadRoute(DEBUG ? 20260814 : Math.floor(Math.random() * 2147483646) + 1);
@@ -685,7 +685,7 @@ function handleImpact(collision: TrafficCollision | null, barrierSeverity = 0): 
   combo = breakCombo(combo, severity < 28);
   if (severity >= 36 || (severity > 26 && vehicle.speedMph > 115)) beginCrash(severity);
   else {
-    audio.collision(severity);
+    audio.collision(severity, collision?.scrape ?? !collision);
     chaseCamera.hit(Math.min(1.2, severity / 38));
     damageUntil = runClock + Math.min(.38, .11 + severity * .004);
     showCallout(severity > 22 ? 'HARD CONTACT' : 'BODY SCRAPE', '', .55);
@@ -786,7 +786,7 @@ function simulate(dt: number): void {
     vehicle.yawRate = 0;
     vehicle.lateralSpeed = 0;
   }
-  if (vehicle.gear !== priorGear && vehicle.gear !== lastGear) audio.gearShift();
+  if (vehicle.gear !== priorGear && vehicle.gear !== lastGear) audio.gearShift(priorGear, vehicle.gear, vehicle.rpm);
   lastGear = vehicle.gear;
 
   if (mode === 'running') {

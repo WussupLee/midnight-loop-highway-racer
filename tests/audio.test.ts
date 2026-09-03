@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { resolveMusicUrl, resolveTrafficHornUrl, speedAudioProfile, trafficPassProfile } from '../src/game/audio';
+import {
+  SOUND_FILES,
+  enginePlaybackRate,
+  resolveMusicUrl,
+  resolveSoundUrl,
+  resolveTrafficHornUrl,
+  speedAudioProfile,
+  tireAudioProfile,
+  trafficPassProfile,
+} from '../src/game/audio';
 
 describe('hosted music path', () => {
   it('keeps the soundtrack inside a GitHub Pages repository subpath', () => {
@@ -15,6 +24,33 @@ describe('hosted music path', () => {
   it('keeps the recorded traffic horn inside the active deployment path', () => {
     expect(resolveTrafficHornUrl('https://wussuplee.github.io/midnight-loop-highway-racer/'))
       .toBe('https://wussuplee.github.io/midnight-loop-highway-racer/audio/traffic-car-horn.ogg');
+  });
+
+  it('resolves every replacement recording relative to the active deployment', () => {
+    for (const sound of Object.keys(SOUND_FILES) as Array<keyof typeof SOUND_FILES>) {
+      expect(resolveSoundUrl(sound, 'https://example.com/racer/'))
+        .toBe(`https://example.com/racer/audio/${SOUND_FILES[sound]}`);
+    }
+  });
+});
+
+describe('sample-driven vehicle mix', () => {
+  it('tracks engine RPM continuously and clamps playback outside the rev range', () => {
+    expect(enginePlaybackRate(900)).toBeCloseTo(.78);
+    expect(enginePlaybackRate(7800)).toBeCloseTo(2.33);
+    expect(enginePlaybackRate(4800)).toBeGreaterThan(enginePlaybackRate(2200));
+    expect(enginePlaybackRate(-100)).toBeCloseTo(.78);
+    expect(enginePlaybackRate(12000)).toBeCloseTo(2.33);
+  });
+
+  it('layers a stronger screech over scrub for a fast handbrake drift', () => {
+    const rolling = tireAudioProfile(.04, 32, false, 0);
+    const braking = tireAudioProfile(.08, 32, false, 1);
+    const drifting = tireAudioProfile(.82, 32, true, 0);
+    expect(rolling.scrub).toBe(0);
+    expect(braking.scrub).toBeGreaterThan(rolling.scrub);
+    expect(drifting.scrub).toBeGreaterThan(braking.scrub);
+    expect(drifting.screech).toBeGreaterThan(drifting.scrub);
   });
 });
 
