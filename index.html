@@ -30,6 +30,13 @@
           <header><span>RUN SELECT</span><b>01 / 01</b><i>▣</i></header>
           <button id="start-button" class="primary-button">START RUN <b>&gt;</b></button>
           <div class="menu-stat"><span>LOCAL RECORD</span><strong id="menu-high-score">000 000</strong></div>
+          <label>Engine sound
+            <select id="engine-sound">
+              <option value="street-sedan" selected>Street Sedan</option>
+              <option value="4age-intake">Toyota 4A-GE — Intake</option>
+              <option value="4age-exhaust">Toyota 4A-GE — Exhaust</option>
+            </select>
+          </label>
           <details>
             <summary>DRIVER CONTROLS</summary>
             <div class="controls-grid">
@@ -129,6 +136,13 @@
       <section id="pause" class="screen overlay-screen hidden">
         <div class="glass-panel compact-panel">
           <div class="eyebrow">RUN ON HOLD</div><h2>PAUSED</h2>
+          <label>Engine sound
+            <select id="pause-engine-sound">
+              <option value="street-sedan">Street Sedan</option>
+              <option value="4age-intake">Toyota 4A-GE — Intake</option>
+              <option value="4age-exhaust">Toyota 4A-GE — Exhaust</option>
+            </select>
+          </label>
           <button id="resume-button" class="primary-button">RESUME RUN</button>
           <button id="restart-pause-button" class="ghost-button">RESTART</button>
           <button id="quit-button" class="ghost-button">QUIT TO TITLE</button>

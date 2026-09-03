@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { GameAudio } from './game/audio';
+import { GameAudio, isEngineOption, type EngineOption } from './game/audio';
 import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, steeringActionForPointerX, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
 import { bankDriftScore, createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
@@ -104,6 +104,8 @@ const finalSpeedText = element('final-speed');
 const finalMissesText = element('final-misses');
 const renderScaleSelect = element<HTMLSelectElement>('render-scale');
 const trafficSelect = element<HTMLSelectElement>('traffic-setting');
+const engineSoundSelect = element<HTMLSelectElement>('engine-sound');
+const pauseEngineSoundSelect = element<HTMLSelectElement>('pause-engine-sound');
 const bloomCheckbox = element<HTMLInputElement>('bloom-setting');
 const ditherCheckbox = element<HTMLInputElement>('dither-setting');
 const mobileControlModeSelect = element<HTMLSelectElement>('mobile-control-mode');
@@ -368,6 +370,23 @@ const playerCollider = physics.createCollider(
 playerCollider.setFriction(.9);
 const traffic = new TrafficManager(scene, physics, RAPIER, 56);
 const audio = new GameAudio();
+let engineOption: EngineOption = 'street-sedan';
+try {
+  const storedEngine = localStorage.getItem('midnight-loop-engine-sound');
+  if (isEngineOption(storedEngine)) engineOption = storedEngine;
+} catch { /* privacy mode */ }
+engineSoundSelect.value = engineOption;
+pauseEngineSoundSelect.value = engineOption;
+audio.setEngineOption(engineOption);
+
+function selectEngineOption(value: string, preview = false): void {
+  if (!isEngineOption(value)) return;
+  engineOption = value;
+  engineSoundSelect.value = value;
+  pauseEngineSoundSelect.value = value;
+  audio.setEngineOption(value, preview);
+  try { localStorage.setItem('midnight-loop-engine-sound', value); } catch { /* privacy mode */ }
+}
 const passTracker = new NearMissTracker();
 let vehicle = createVehicleState();
 let combo = createCombo();
@@ -1196,6 +1215,8 @@ function resize(): void {
 window.addEventListener('resize', resize);
 renderScaleSelect.addEventListener('change', resize);
 trafficSelect.addEventListener('change', () => { traffic.density = Number.parseFloat(trafficSelect.value); });
+engineSoundSelect.addEventListener('change', () => selectEngineOption(engineSoundSelect.value, true));
+pauseEngineSoundSelect.addEventListener('change', () => selectEngineOption(pauseEngineSoundSelect.value, true));
 
 const gameplayCodes = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyC']);
 window.addEventListener('keydown', (event) => {

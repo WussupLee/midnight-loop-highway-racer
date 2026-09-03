@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ENGINE_OPTIONS,
   SOUND_FILES,
-  engineMixProfile,
   enginePlaybackRate,
   engineVolumeProfile,
+  isEngineOption,
   resolveMusicUrl,
   resolveSoundUrl,
   resolveTrafficHornUrl,
@@ -38,24 +39,21 @@ describe('hosted music path', () => {
 
 describe('sample-driven vehicle mix', () => {
   it('tracks engine RPM continuously and clamps playback outside the rev range', () => {
-    expect(enginePlaybackRate(900)).toBeCloseTo(.88);
-    expect(enginePlaybackRate(7800)).toBeCloseTo(1.16);
+    expect(enginePlaybackRate(900)).toBeCloseTo(.7);
+    expect(enginePlaybackRate(7800)).toBeCloseTo(1.48);
     expect(enginePlaybackRate(4800)).toBeGreaterThan(enginePlaybackRate(2200));
-    expect(enginePlaybackRate(-100)).toBeCloseTo(.88);
-    expect(enginePlaybackRate(12000)).toBeCloseTo(1.16);
+    expect(enginePlaybackRate(-100)).toBeCloseTo(.7);
+    expect(enginePlaybackRate(12000)).toBeCloseTo(1.48);
   });
 
-  it('crossfades neighboring steady RPM recordings without replaying a rev sweep', () => {
-    const idle = engineMixProfile(900);
-    const midrange = engineMixProfile(4300);
-    const redline = engineMixProfile(7800);
-    expect(idle.weights[0]).toBeCloseTo(1);
-    expect(redline.weights[5]).toBeCloseTo(1);
-    expect(midrange.weights.filter(weight => weight > 0)).toHaveLength(2);
-    for (const profile of [idle, midrange, redline]) {
-      expect(profile.weights.reduce((sum, weight) => sum + weight * weight, 0)).toBeCloseTo(1);
-      expect(profile.rates.every(rate => rate >= .84 && rate <= 1.18)).toBe(true);
+  it('provides three validated engine choices with distinct rising pitch curves', () => {
+    expect(ENGINE_OPTIONS).toEqual(['street-sedan', '4age-intake', '4age-exhaust']);
+    for (const option of ENGINE_OPTIONS) {
+      expect(isEngineOption(option)).toBe(true);
+      expect(enginePlaybackRate(7800, option)).toBeGreaterThan(enginePlaybackRate(900, option));
     }
+    expect(isEngineOption('diesel-truck')).toBe(false);
+    expect(new Set(ENGINE_OPTIONS.map(option => enginePlaybackRate(7800, option))).size).toBe(3);
   });
 
   it('makes throttle and rising RPM clearly louder than idle', () => {

@@ -1,12 +1,9 @@
 import type { VehicleState } from './vehicle';
 
 export const SOUND_FILES = {
-  engineRpm0: 'engine-rpm-0.wav',
-  engineRpm1: 'engine-rpm-1.wav',
-  engineRpm2: 'engine-rpm-2.wav',
-  engineRpm3: 'engine-rpm-3.wav',
-  engineRpm4: 'engine-rpm-4.wav',
-  engineRpm5: 'engine-rpm-5.wav',
+  engineStreetSedan: 'engine-street-sedan.mp3',
+  engine4ageIntake: 'engine-4age-intake.mp3',
+  engine4ageExhaust: 'engine-4age-exhaust.mp3',
   engineStart: 'engine-start.wav',
   tireScreech: 'tire-screech.ogg',
   tireScrub: 'tire-scrub.ogg',
@@ -31,6 +28,19 @@ export const SOUND_FILES = {
 
 type SoundId = keyof typeof SOUND_FILES;
 
+export const ENGINE_OPTIONS = ['street-sedan', '4age-intake', '4age-exhaust'] as const;
+export type EngineOption = typeof ENGINE_OPTIONS[number];
+
+const ENGINE_SOUND_IDS: Record<EngineOption, SoundId> = {
+  'street-sedan': 'engineStreetSedan',
+  '4age-intake': 'engine4ageIntake',
+  '4age-exhaust': 'engine4ageExhaust',
+};
+
+export function isEngineOption(value: string | null): value is EngineOption {
+  return ENGINE_OPTIONS.includes(value as EngineOption);
+}
+
 export function resolveMusicUrl(baseUri: string): string {
   return new URL('audio/midnight-loop-background.mp3', baseUri).href;
 }
@@ -43,27 +53,14 @@ export function resolveTrafficHornUrl(baseUri: string): string {
   return resolveSoundUrl('trafficHorn', baseUri);
 }
 
-export function enginePlaybackRate(rpm: number): number {
+export function enginePlaybackRate(rpm: number, option: EngineOption = 'street-sedan'): number {
   const normalized = Math.min(1, Math.max(0, (rpm - 900) / 6900));
-  return .88 + normalized * .28;
-}
-
-export function engineMixProfile(rpm: number): {
-  weights: number[];
-  rates: number[];
-} {
-  const normalized = Math.min(1, Math.max(0, (rpm - 900) / 6900));
-  const centers = [0, .2, .4, .6, .8, 1];
-  const rawWeights = centers.map(center => Math.max(0, 1 - Math.abs(normalized - center) / .2));
-  const total = rawWeights.reduce((sum, weight) => sum + weight, 0) || 1;
-  return {
-    // Square-root gain preserves equal perceived power while two adjacent
-    // recordings overlap, avoiding a quiet dip halfway between RPM bands.
-    weights: rawWeights.map(weight => Math.sqrt(weight / total)),
-    // Each fixed-RPM recording bends upward within its band. The next sample
-    // crossfades in before the bend becomes artificial or "chipmunked."
-    rates: centers.map(center => Math.min(1.18, Math.max(.84, 1 + (normalized - center) * .82))),
-  };
+  const curve = option === 'street-sedan'
+    ? { floor: .7, range: .78 }
+    : option === '4age-intake'
+      ? { floor: .66, range: .94 }
+      : { floor: .68, range: .88 };
+  return curve.floor + normalized * curve.range;
 }
 
 export function engineVolumeProfile(rpm: number, throttle: number, coasting = false): number {
@@ -133,6 +130,7 @@ export class GameAudio {
   private engineSources: AudioBufferSourceNode[] = [];
   private engineFilters: BiquadFilterNode[] = [];
   private engineGains: GainNode[] = [];
+  private engineOption: EngineOption = 'street-sedan';
   private roadSource: AudioBufferSourceNode | null = null;
   private roadFilter: BiquadFilterNode | null = null;
   private roadGain: GainNode | null = null;
@@ -159,6 +157,22 @@ export class GameAudio {
   private lastHornAt = -10;
   private nextDriftAccentAt = -1;
   private shiftDuckUntil = -1;
+
+  setEngineOption(option: EngineOption, preview = false): void {
+    this.engineOption = option;
+    if (!preview) return;
+    this.playBuffer(ENGINE_SOUND_IDS[option], {
+      volume: .24,
+      rate: enginePlaybackRate(3900, option),
+      duration: 1.05,
+      offset: .12,
+      filterType: 'lowpass',
+      filterHz: option === 'street-sedan' ? 4100 : 5200,
+      attack: .035,
+    });
+  }
+
+  getEngineOption(): EngineOption { return this.engineOption; }
 
   async start(playIgnition = false): Promise<void> {
     if (this.context) {
@@ -235,8 +249,7 @@ export class GameAudio {
   private startContinuousLayers(): void {
     if (!this.context || !this.master || this.engineSources.length) return;
 
-    const engineSounds: SoundId[] = ['engineRpm0', 'engineRpm1', 'engineRpm2', 'engineRpm3', 'engineRpm4', 'engineRpm5'];
-    for (const sound of engineSounds) {
+    for (const option of ENGINE_OPTIONS) {
       const filter = this.context.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = 1750;
@@ -244,7 +257,7 @@ export class GameAudio {
       const gain = this.context.createGain();
       gain.gain.value = 0;
       filter.connect(gain).connect(this.master);
-      const source = this.makeLoop(sound, filter);
+      const source = this.makeLoop(ENGINE_SOUND_IDS[option], filter, .08);
       if (source) {
         this.engineSources.push(source);
         this.engineFilters.push(filter);
@@ -342,15 +355,18 @@ export class GameAudio {
     const coast = state.throttle < .09 && state.speedMps > 8 ? 1 : 0;
     const run = running ? 1 : 0;
 
-    const engine = engineMixProfile(state.rpm);
     const engineLevel = engineVolumeProfile(state.rpm, state.throttle, coast > 0);
     for (let index = 0; index < this.engineSources.length; index += 1) {
-      this.engineSources[index].playbackRate.setTargetAtTime(engine.rates[index] ?? 1, now, .045);
-      this.engineFilters[index].frequency.setTargetAtTime(1750 + rpm * 3300 + state.throttle * 1550, now, .055);
+      const option = ENGINE_OPTIONS[index];
+      const selected = option === this.engineOption ? 1 : 0;
+      const toneBase = option === 'street-sedan' ? 1850 : option === '4age-intake' ? 2350 : 2050;
+      const trim = option === 'street-sedan' ? 1.04 : option === '4age-intake' ? .86 : .78;
+      this.engineSources[index].playbackRate.setTargetAtTime(enginePlaybackRate(state.rpm, option), now, .055);
+      this.engineFilters[index].frequency.setTargetAtTime(toneBase + rpm * 3300 + state.throttle * 1450, now, .06);
       this.engineGains[index].gain.setTargetAtTime(
-        run * shifting * (engine.weights[index] ?? 0) * engineLevel,
+        run * shifting * selected * trim * engineLevel,
         now,
-        state.throttle > .2 ? .04 : .085,
+        selected ? (state.throttle > .2 ? .045 : .09) : .12,
       );
     }
 
