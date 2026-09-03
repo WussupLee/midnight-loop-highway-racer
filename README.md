@@ -4,7 +4,7 @@
 
 The hosted version is deployed automatically to GitHub Pages whenever the default branch is updated.
 
-MIDNIGHT LOOP is an original browser-based 3D highway score-attack racer. It combines force-integrated arcade-simulation handling, five lanes of independent traffic, close-pass scoring, a rechargeable boost system, a persistent local record, and a gritty early-2000s American freeway atmosphere. It uses no licensed cars, brands, maps, or proprietary game assets. The local build includes the user-supplied background track described below.
+MIDNIGHT LOOP is an original browser-based 3D highway score-attack racer. It combines force-integrated arcade-simulation handling, five lanes of independent traffic, close-pass scoring, a rechargeable boost system, a persistent local record, and a gritty early-2000s American freeway atmosphere. Its two selectable cars are fictional and unbranded; the imported base mesh for the KITSUNE R-SPEC is a CC0 asset credited below. The local build includes the user-supplied background track described below.
 
 ## Start the game
 
@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Midnight Loop opens at the local address printed by Vite. The dedicated preview used for this project is `http://127.0.0.1:4175/`, keeping it separate from other local game projects. Click **Start Run** once to enable the engine/effects audio and background music, then begin driving.
+Midnight Loop opens at the local address printed by Vite. The dedicated preview used for this project is `http://127.0.0.1:4175/`, keeping it separate from other local game projects. On the home screen, use the arrow buttons or Left/Right (A/D) to choose a car, and drag or swipe across the car to inspect it while it rotates through a full 360 degrees. Click the full-width **Start Run** button (or press Enter/Space) to enable audio and begin driving. The chosen car is remembered locally.
 
 For a designer-friendly test build, add `?debug=1` to the address. The on-screen panel can start automatic driving, jump to 157 MPH, force a crash, and stage every scoring scenario without developer tools.
 
@@ -61,6 +61,7 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 ## Architecture
 
 - `src/main.ts` - fixed-step loop, keyboard/multi-touch input, run flow, Rapier synchronization, scoring orchestration, HUD, crash cut, and debug bridge.
+- `src/game/carSelection.ts` - typed car catalog, selection wrapping, display metadata, and persistent selection IDs.
 - `src/game/mobileControls.ts` - pure multi-touch action state, continuous steering-zone direction selection, and conversion into the shared driver input model.
 - `src/game/vehicle.ts` — deterministic 120 Hz custom tire, steering, yaw, drivetrain, brake, handbrake, drag, and load-transfer simulation.
 - `src/game/scoring.ts` — pure pass lifecycle, nonlinear scoring, duplicate prevention, and combo logic.
@@ -68,7 +69,7 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 - `src/game/world.ts` - restart-safe recycled curved five-lane freeway, shoulders, Jersey barriers, constructed tunnels with segmented concrete walls, vents and utility conduits, overpasses, original green signage, warm lighting, and skyline.
 - `src/game/traffic.ts` — bounded 56-vehicle pool, a low-profile traffic mix (compact, coupe, SUV, and pickup, plus rare large trucks), gap-preserving three-car opening waves, safe lane changes, hybrid traffic headlights, and collisions.
 - `src/game/vehicleMeshes.ts` — shared PS2-era faceted loft geometry, low-cost round lamps, and soft additive glow texture generation for underglow and night-visible brake-light halos.
-- `src/game/visuals.ts` — original silver tuner coupe, reference-aligned four-round rear composition, raised wing, compact lower plate, bumper opening, green underglow, broad soft dynamic headlights, chase/hood cameras, and speed effects.
+- `src/game/visuals.ts` — the original silver Asterion tuner coupe plus the imported-and-restyled gunmetal Kitsune sports car, independently animated wheels, model-aligned head/brake lights, underglow, chase/hood cameras, and speed effects.
 - `src/game/audio.ts` — procedural engine, throttle, overrun, road, braking, tires, boost, wind, stereo traffic passes, impacts, crash layers, UI, and background-track playback.
 
 ## Music asset
@@ -80,6 +81,10 @@ Three.js renders with ACES tone mapping, fog, dark wet materials, darkness-led e
 Procedural audio includes drivetrain, tire, road, boost, collision, and speed-dependent atmosphere. Every completed traffic pass produces a spatial Doppler-style body-and-air whoosh, with close fast passes becoming substantially stronger and the near-miss/perfect-pass sting layering over the same moment. Traffic can occasionally answer with a spatially positioned recorded horn. Music is intentionally bass-reduced below 95 mph; crossing 95 mph smoothly restores its low end while the speed-dependent wind continues to rise.
 
 The traffic horn is adapted in playback only (level, stereo position, filtering, and speed-dependent pitch) from **Car Horn.wav** by 15HPanska_Ruttner_Jan, obtained through Wikimedia Commons and released under the [CC0 1.0 public-domain dedication](https://commons.wikimedia.org/wiki/File:Car_Horn.wav). The bundled browser asset is `public/audio/traffic-car-horn.ogg`.
+
+## Vehicle asset
+
+The KITSUNE R-SPEC uses the four-wheel **Sports** mesh from Rgsdev's [Low Poly Vehicle Pack](https://rgsdev.itch.io/free-low-poly-vehicle-pack), released under the [CC0 1.0 public-domain dedication](https://creativecommons.org/publicdomain/zero/1.0/). The mesh is restyled in-game with original materials, lamps, aero parts, and effects. See `public/models/ATTRIBUTIONS.md` for the bundled-asset record.
 
 ## Physics approach
 
@@ -100,7 +105,7 @@ Open `http://127.0.0.1:4175/?debug=1` while the dedicated preview is running. Th
 - Mobile touch controls are tuned for portrait phones; landscape phone and tablet layouts remain usable but do not receive the same bespoke camera framing.
 - Tilt sensitivity is calibrated for portrait phone play and depends on the quality/rate of the device orientation sensors.
 - Gamepad input is not implemented.
-- Vehicle and traffic models use original runtime-built faceted shells rather than authored high-detail or licensed meshes.
+- Vehicle and traffic art deliberately uses lightweight PS2-era geometry: one player car is runtime-built and the other starts from a low-poly CC0 mesh, rather than a modern high-detail licensed vehicle.
 - Most automotive effects are synthesized at runtime, while traffic horns use a CC0 recording; the procedural engine and impacts remain intentionally more stylized than fully recorded vehicle audio.
 - The world is semi-endless and recycled; it is not an open city map.
 - Traffic uses projected light pools plus six nearby dynamic spotlights instead of one costly true spotlight per vehicle.

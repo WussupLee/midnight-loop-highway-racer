@@ -7,12 +7,13 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GameAudio, isEngineOption, type EngineOption } from './game/audio';
+import { CAR_DEFINITIONS, adjacentCar, carDefinition, isCarId, type CarId } from './game/carSelection';
 import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, steeringActionForPointerX, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
 import { bankDriftScore, createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
 import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
 import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
-import { ChaseCamera, RunIntroCamera, SpeedStreaks, createPlayerCar } from './game/visuals';
+import { ChaseCamera, RunIntroCamera, SpeedStreaks, createKitsuneCar, createPlayerCar, type PlayerCarVisual } from './game/visuals';
 import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading, tunnelAcousticAmount } from './game/world';
 
 type GameMode = 'menu' | 'intro' | 'running' | 'paused' | 'crashing' | 'gameover';
@@ -28,6 +29,7 @@ interface RunStats {
 
 interface DebugSnapshot {
   mode: GameMode;
+  selectedCar: CarId;
   player: Record<string, number | boolean>;
   score: number;
   highScore: number;
@@ -56,6 +58,7 @@ declare global {
       forceCrash: () => void;
       addBoost: (amount?: number) => void;
       toggleCamera: () => string;
+      selectCar: (id: CarId) => void;
       getMusicState: () => { loaded: boolean; playing: boolean; muted: boolean; currentTime: number };
     };
   }
@@ -77,6 +80,13 @@ const debugPanel = element('debug-panel');
 const debugReadout = element<HTMLPreElement>('debug-readout');
 const muteIndicator = element('mute-indicator');
 const startButton = element<HTMLButtonElement>('start-button');
+const previousCarButton = element<HTMLButtonElement>('previous-car');
+const nextCarButton = element<HTMLButtonElement>('next-car');
+const carDragSurface = element('car-drag-surface');
+const carCounterText = element('car-counter');
+const carNameText = element('car-name');
+const carClassText = element('car-class');
+const carDescriptionText = element('car-description');
 const resumeButton = element<HTMLButtonElement>('resume-button');
 const restartPauseButton = element<HTMLButtonElement>('restart-pause-button');
 const quitButton = element<HTMLButtonElement>('quit-button');
@@ -357,7 +367,26 @@ await RAPIER.init();
 const physics = new RAPIER.World({ x: 0, y: 0, z: 0 });
 physics.timestep = 1 / 120;
 const highway = new HighwayWorld(scene, renderer);
-const playerCar = createPlayerCar(scene);
+const asterionCar = createPlayerCar(scene);
+let kitsuneCar: PlayerCarVisual;
+try {
+  kitsuneCar = await createKitsuneCar(scene);
+} catch (error) {
+  console.warn('KITSUNE R-SPEC model failed to load; using a safe visual fallback.', error);
+  kitsuneCar = createPlayerCar(scene);
+  kitsuneCar.group.name = 'Kitsune R-Spec fallback visual';
+}
+const playerCars: Record<CarId, PlayerCarVisual> = {
+  'asterion-vxr': asterionCar,
+  'kitsune-r-spec': kitsuneCar,
+};
+let selectedCarId: CarId = 'asterion-vxr';
+try {
+  const storedCar = localStorage.getItem('midnight-loop-selected-car');
+  if (isCarId(storedCar)) selectedCarId = storedCar;
+} catch { /* privacy mode */ }
+let playerCar = playerCars[selectedCarId];
+for (const [id, car] of Object.entries(playerCars)) car.group.visible = id === selectedCarId;
 const chaseCamera = new ChaseCamera(camera);
 const runIntroCamera = new RunIntroCamera(camera);
 const speedStreaks = new SpeedStreaks(scene);
@@ -493,6 +522,63 @@ window.addEventListener('deviceorientation', (event) => {
 
 const previousPose = { x: vehicle.x, z: vehicle.z, yaw: vehicle.yaw };
 const renderVehicle: VehicleState = { ...vehicle };
+const showroomVehicle: VehicleState = {
+  ...vehicle,
+  vx: 0, vz: 0, speedMps: 0, speedMph: 0,
+  longitudinalSpeed: 0, lateralSpeed: 0, yawRate: 0,
+  steering: 0, steerAngle: 0, rpm: 900, gear: 1,
+};
+let showroomYaw = .45;
+let showroomDragging = false;
+let showroomPointerId = -1;
+let showroomLastPointerX = 0;
+let showroomAutoResumeAt = 0;
+
+function updateCarSelectionUi(): void {
+  const definition = carDefinition(selectedCarId);
+  const index = CAR_DEFINITIONS.findIndex((car) => car.id === selectedCarId);
+  carCounterText.textContent = `${String(index + 1).padStart(2, '0')} / ${String(CAR_DEFINITIONS.length).padStart(2, '0')}`;
+  carNameText.textContent = definition.name;
+  carClassText.textContent = definition.classLabel;
+  carDescriptionText.textContent = definition.description;
+  carDragSurface.setAttribute('aria-label', `${definition.name} rotating 360 degree preview`);
+}
+
+function selectCar(nextId: CarId): void {
+  if (nextId === selectedCarId) return;
+  playerCar.group.visible = false;
+  selectedCarId = nextId;
+  playerCar = playerCars[selectedCarId];
+  playerCar.group.visible = true;
+  showroomYaw = .45;
+  showroomAutoResumeAt = performance.now() / 1000 + 1.2;
+  try { localStorage.setItem('midnight-loop-selected-car', selectedCarId); } catch { /* privacy mode */ }
+  updateCarSelectionUi();
+  audio.ui();
+}
+
+function stepCarSelection(direction: -1 | 1): void {
+  selectCar(adjacentCar(selectedCarId, direction));
+}
+
+function updateShowroom(dt: number, now: number): void {
+  if (!showroomDragging && now >= showroomAutoResumeAt) showroomYaw += dt * .34;
+  showroomVehicle.x = roadCenterX(16);
+  showroomVehicle.z = 16;
+  showroomVehicle.yaw = showroomYaw;
+  showroomVehicle.boostActive = false;
+  playerCar.update(showroomVehicle, false, dt);
+  playerCar.group.rotation.y = showroomYaw;
+  playerCar.group.rotation.x = 0;
+  playerCar.group.rotation.z = 0;
+  const roadY = roadCenterY(showroomVehicle.z);
+  camera.position.set(showroomVehicle.x + 5.4, roadY + 2.2, showroomVehicle.z - 6.25);
+  camera.lookAt(showroomVehicle.x, roadY + .66, showroomVehicle.z);
+  camera.fov += (47 - camera.fov) * Math.min(1, dt * 7);
+  camera.updateProjectionMatrix();
+}
+
+updateCarSelectionUi();
 
 traffic.reset(vehicle.z);
 playerCar.update(vehicle, false, 1 / 60);
@@ -516,6 +602,10 @@ function setMode(next: GameMode): void {
   mobileControls.classList.toggle('active', mobileDriving);
   mobileControls.setAttribute('aria-hidden', String(!mobileDriving));
   if (!mobileDriving) clearMobileInput();
+  if (next === 'menu') {
+    showroomAutoResumeAt = performance.now() / 1000 + .65;
+    updateCarSelectionUi();
+  }
 }
 
 function startRun(): void {
@@ -992,7 +1082,7 @@ function debugSnapshot(): DebugSnapshot {
   const roadRange = highway.getChunkRange();
   const trafficLighting = traffic.getLightingTelemetry();
   return {
-    mode,
+    mode, selectedCar: selectedCarId,
     player: {
       x: Number(vehicle.x.toFixed(3)), y: Number((roadCenterY(vehicle.z) + .55).toFixed(3)), z: Number(vehicle.z.toFixed(3)),
       yaw: Number(vehicle.yaw.toFixed(4)), speedMps: Number(vehicle.speedMps.toFixed(3)), speedMph: Number(vehicle.speedMph.toFixed(2)),
@@ -1083,6 +1173,7 @@ if (DEBUG) {
     forceCrash: () => beginCrash(80),
     addBoost: (amount = 1) => { vehicle.boost = Math.min(1, vehicle.boost + amount); },
     toggleCamera,
+    selectCar,
     getMusicState: () => audio.getMusicState(),
   };
   debugPanel.querySelectorAll<HTMLButtonElement>('[data-debug-scenario]').forEach((button) => {
@@ -1223,6 +1314,12 @@ window.addEventListener('keydown', (event) => {
   if (gameplayCodes.has(event.code)) event.preventDefault();
   if (DEBUG) { debugLastKey = event.code; debugKeyEvents += 1; }
   if (event.repeat && ['Escape', 'KeyM', 'KeyR', 'KeyC'].includes(event.code)) return;
+  if (mode === 'menu') {
+    if (event.repeat && ['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'Enter', 'Space'].includes(event.code)) return;
+    if (event.code === 'ArrowLeft' || event.code === 'KeyA') { stepCarSelection(-1); return; }
+    if (event.code === 'ArrowRight' || event.code === 'KeyD') { stepCarSelection(1); return; }
+    if (event.code === 'Enter' || event.code === 'Space') { startRun(); return; }
+  }
   if (mode === 'intro' && ['Enter', 'Space', 'Escape'].includes(event.code)) {
     event.preventDefault();
     skipRunIntro();
@@ -1318,6 +1415,34 @@ ditherCheckbox.addEventListener('change', () => {
   document.documentElement.classList.toggle('heavy-dither', ditherCheckbox.checked);
 });
 
+previousCarButton.addEventListener('click', () => stepCarSelection(-1));
+nextCarButton.addEventListener('click', () => stepCarSelection(1));
+carDragSurface.addEventListener('pointerdown', (event) => {
+  if (mode !== 'menu') return;
+  event.preventDefault();
+  showroomDragging = true;
+  showroomPointerId = event.pointerId;
+  showroomLastPointerX = event.clientX;
+  carDragSurface.classList.add('is-dragging');
+  carDragSurface.setPointerCapture(event.pointerId);
+});
+carDragSurface.addEventListener('pointermove', (event) => {
+  if (!showroomDragging || event.pointerId !== showroomPointerId) return;
+  const movement = event.clientX - showroomLastPointerX;
+  showroomLastPointerX = event.clientX;
+  showroomYaw += movement * .012;
+});
+const releaseShowroomPointer = (event: PointerEvent): void => {
+  if (event.pointerId !== showroomPointerId) return;
+  showroomDragging = false;
+  showroomPointerId = -1;
+  showroomAutoResumeAt = performance.now() / 1000 + 2;
+  carDragSurface.classList.remove('is-dragging');
+};
+carDragSurface.addEventListener('pointerup', releaseShowroomPointer);
+carDragSurface.addEventListener('pointercancel', releaseShowroomPointer);
+carDragSurface.addEventListener('lostpointercapture', releaseShowroomPointer);
+
 startButton.addEventListener('click', startRun);
 resumeButton.addEventListener('click', togglePause);
 restartPauseButton.addEventListener('click', startRun);
@@ -1353,8 +1478,12 @@ function frame(timeMs: number): void {
   renderVehicle.yaw = previousPose.yaw + yawDelta * renderAlpha;
 
   highway.update(vehicle.z);
-  playerCar.update(renderVehicle, getInput().brake > .1, realDt);
-  chaseCamera.update(renderVehicle, realDt);
+  if (mode === 'menu') {
+    updateShowroom(realDt, now);
+  } else {
+    playerCar.update(renderVehicle, getInput().brake > .1, realDt);
+    chaseCamera.update(renderVehicle, realDt);
+  }
   if (mode === 'intro') {
     const introFinished = runIntroCamera.update(renderVehicle, realDt, chaseCamera.getPose());
     if (runIntroCamera.getProgress() > .74) hud.classList.remove('cinematic');

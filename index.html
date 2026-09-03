@@ -26,9 +26,22 @@
           <p class="tagline">FIND THE LINE. MAKE IT HOME.</p>
           <div class="route-data" aria-hidden="true"><span>ROUTE ID</span><b>SUBJECT A-45</b><span>ACCESS</span><b>OPEN LOOP</b><span>STATUS</span><b>UNSTABLE</b></div>
         </section>
+        <section class="car-showcase" aria-label="Selected car showroom">
+          <div id="car-drag-surface" class="car-drag-surface" role="img" aria-label="ASTERION VX-R rotating 360 degree preview"></div>
+          <div class="car-selector glass-panel">
+            <button id="previous-car" class="car-arrow" type="button" aria-label="Previous car">&lt;</button>
+            <div class="car-identity" aria-live="polite">
+              <span id="car-counter">01 / 02</span>
+              <h2 id="car-name">ASTERION VX-R</h2>
+              <b id="car-class">ORIGINAL // STREET SPEC</b>
+              <p id="car-description">Balanced aero · quad lamps · twin boost exhaust</p>
+            </div>
+            <button id="next-car" class="car-arrow" type="button" aria-label="Next car">&gt;</button>
+          </div>
+          <p class="spin-hint">DRAG / SWIPE TO ROTATE · AUTO 360°</p>
+        </section>
         <section class="menu-panel glass-panel">
           <header><span>RUN SELECT</span><b>01 / 01</b><i>▣</i></header>
-          <button id="start-button" class="primary-button">START RUN <b>&gt;</b></button>
           <div class="menu-stat"><span>LOCAL RECORD</span><strong id="menu-high-score">000 000</strong></div>
           <label>Engine sound
             <select id="engine-sound">
@@ -58,9 +71,13 @@
             <label class="toggle-line">Bloom <input id="bloom-setting" type="checkbox" checked /></label>
             <label class="toggle-line">Heavy dither <input id="dither-setting" type="checkbox" checked /></label>
           </details>
+          <details>
+            <summary>ASSET CREDITS</summary>
+            <p class="asset-credit">KITSUNE R-SPEC uses the CC0 “Sports” base mesh from Rgsdev’s Free Low Poly Vehicles Pack, modified for MIDNIGHT LOOP.</p>
+          </details>
         </section>
-        <div class="menu-prompts" aria-hidden="true"><span>× BACK</span><b>○ CONFIRM</b></div>
-        <footer>ORIGINAL PROTOTYPE // FICTIONAL VEHICLES AND CITY // v1.2</footer>
+        <button id="start-button" class="menu-start-button" type="button"><span>START RUN</span><b>ENTER &gt;</b></button>
+        <footer>ORIGINAL PROTOTYPE // FICTIONAL VEHICLES AND CITY // v1.3</footer>
       </main>
 
       <section id="hud" class="hud hidden" aria-live="polite">
