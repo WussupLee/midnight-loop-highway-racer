@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_CONDUIT_COUNT, TUNNEL_PANEL_SPACING, TUNNEL_UNIFORM_FILL_INTENSITY, TUNNEL_VENT_SPACING, tunnelWallDetailPlan } from '../src/game/world';
+import { configureRoadRoute, createTunnelArchGeometry, getRoadRouteSeed, highwayChunkStartFor, highwaySignDescriptor, highwaySignIndex, isTunnelChunkNumber, OUTER_EDGE_LINE_SEGMENT_LENGTH, ROAD_CURVE_CELL_LENGTH, ROAD_MARK_SPACING, roadCenterX, roadHeading, TUNNEL_AMBIENT_COLOR, TUNNEL_CEILING_LIGHT_COLOR, TUNNEL_CEILING_LIGHT_HEIGHT, TUNNEL_CONDUIT_COUNT, TUNNEL_PANEL_SPACING, TUNNEL_UNIFORM_FILL_INTENSITY, TUNNEL_VENT_SPACING, tunnelAcousticAmount, tunnelWallDetailPlan } from '../src/game/world';
 
 describe('highway restart coverage', () => {
   it('rebuilds the starting line with road behind and far ahead', () => {
@@ -45,6 +45,15 @@ describe('randomized gradual freeway curves', () => {
 });
 
 describe('tunnel geometry', () => {
+  it('fades tunnel acoustics in at the portals and holds them through the interior', () => {
+    expect(tunnelAcousticAmount(1049.9)).toBe(0);
+    expect(tunnelAcousticAmount(1050)).toBe(0);
+    expect(tunnelAcousticAmount(1066)).toBeCloseTo(.5);
+    expect(tunnelAcousticAmount(1082)).toBe(1);
+    expect(tunnelAcousticAmount(1200)).toBe(1);
+    expect(tunnelAcousticAmount(1349.9)).toBeGreaterThan(0);
+    expect(tunnelAcousticAmount(1350)).toBe(0);
+  });
   it('builds a wide elliptical arch with road-level sides and a raised crown', () => {
     const geometry = createTunnelArchGeometry(150, 12.9, 6.8, 24);
     geometry.computeBoundingBox();

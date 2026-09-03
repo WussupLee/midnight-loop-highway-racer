@@ -13,7 +13,7 @@ import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpee
 import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
 import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
 import { ChaseCamera, RunIntroCamera, SpeedStreaks, createPlayerCar } from './game/visuals';
-import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading } from './game/world';
+import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading, tunnelAcousticAmount } from './game/world';
 
 type GameMode = 'menu' | 'intro' | 'running' | 'paused' | 'crashing' | 'gameover';
 type ScenarioName = 'normal-pass' | 'near-miss' | 'distant-pass' | 'duplicate' | 'collision' | 'scrape' | 'thread-needle';
@@ -1365,7 +1365,7 @@ function frame(timeMs: number): void {
   cityGlow.position.x = vehicle.x + 55;
   neutralFill.position.z = vehicle.z + 125;
   neutralFill.position.x = vehicle.x - 48;
-  audio.update(vehicle, realDt, mode === 'intro' || mode === 'running');
+  audio.update(vehicle, realDt, mode === 'intro' || mode === 'running', tunnelAcousticAmount(vehicle.z));
   if (mode !== 'menu') updateHud();
   updateDebug();
   bloomPass.enabled = bloomCheckbox.checked;

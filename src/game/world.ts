@@ -14,6 +14,8 @@ export const TUNNEL_UNIFORM_FILL_INTENSITY = .78;
 export const TUNNEL_PANEL_SPACING = 10;
 export const TUNNEL_VENT_SPACING = 30;
 export const TUNNEL_CONDUIT_COUNT = 4;
+export const HIGHWAY_CHUNK_LENGTH = 150;
+export const TUNNEL_AUDIO_TRANSITION_LENGTH = 32;
 export const ROAD_CURVE_CELL_LENGTH = 900;
 
 export interface TunnelWallDetailPlan {
@@ -40,6 +42,22 @@ export function tunnelWallDetailPlan(length: number): TunnelWallDetailPlan {
 export function isTunnelChunkNumber(chunkNumber: number): boolean {
   const phase = Math.abs(chunkNumber % 13);
   return phase === 7 || phase === 8;
+}
+
+export function tunnelAcousticAmount(z: number, transitionLength = TUNNEL_AUDIO_TRANSITION_LENGTH): number {
+  const chunkNumber = Math.floor(z / HIGHWAY_CHUNK_LENGTH);
+  if (!isTunnelChunkNumber(chunkNumber)) return 0;
+
+  let firstTunnelChunk = chunkNumber;
+  let lastTunnelChunk = chunkNumber;
+  while (isTunnelChunkNumber(firstTunnelChunk - 1)) firstTunnelChunk -= 1;
+  while (isTunnelChunkNumber(lastTunnelChunk + 1)) lastTunnelChunk += 1;
+
+  const entranceZ = firstTunnelChunk * HIGHWAY_CHUNK_LENGTH;
+  const exitZ = (lastTunnelChunk + 1) * HIGHWAY_CHUNK_LENGTH;
+  const portalDepth = Math.min(z - entranceZ, exitZ - z);
+  const progress = clamp(portalDepth / Math.max(1, transitionLength), 0, 1);
+  return progress * progress * (3 - 2 * progress);
 }
 
 interface RoadCurveCell {
@@ -435,7 +453,7 @@ export class HighwayWorld {
   readonly skyline = new THREE.Group();
   private readonly celestial = new THREE.Group();
   private readonly chunks: Chunk[] = [];
-  private readonly chunkLength = 150;
+  private readonly chunkLength = HIGHWAY_CHUNK_LENGTH;
   private readonly chunkCount = 28;
   private nextStartZ = 0;
   private readonly roadMaterial: THREE.MeshStandardMaterial;

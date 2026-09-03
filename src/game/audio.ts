@@ -105,6 +105,29 @@ export function trafficPassProfile(relativeSpeed: number, lateralDistance: numbe
   };
 }
 
+export interface TunnelMixProfile {
+  dryGain: number;
+  earlyReflectionGain: number;
+  reverbGain: number;
+  lowMidBodyGain: number;
+  exteriorAmbience: number;
+  windExposure: number;
+  reflectionLowpassHz: number;
+}
+
+export function tunnelMixProfile(amount: number): TunnelMixProfile {
+  const enclosed = Math.min(1, Math.max(0, amount));
+  return {
+    dryGain: 1 + enclosed * .12,
+    earlyReflectionGain: enclosed * .14,
+    reverbGain: enclosed * .23,
+    lowMidBodyGain: enclosed * .11,
+    exteriorAmbience: 1 - enclosed * .9,
+    windExposure: 1 - enclosed * .42,
+    reflectionLowpassHz: 5200 - enclosed * 1700,
+  };
+}
+
 interface PlayOptions {
   volume: number;
   rate?: number;
@@ -121,6 +144,12 @@ interface PlayOptions {
 export class GameAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
+  private effectsBus: GainNode | null = null;
+  private effectsDryGain: GainNode | null = null;
+  private tunnelEarlyGain: GainNode | null = null;
+  private tunnelReverbGain: GainNode | null = null;
+  private tunnelLowMidGain: GainNode | null = null;
+  private tunnelReflectionLowpass: BiquadFilterNode | null = null;
   private music: HTMLAudioElement | null = null;
   private musicGain: GainNode | null = null;
   private musicHighpass: BiquadFilterNode | null = null;
@@ -193,6 +222,7 @@ export class GameAudio {
     compressor.attack.value = .003;
     compressor.release.value = .18;
     this.master.connect(compressor).connect(this.context.destination);
+    this.setupTunnelAcoustics();
 
     this.music = new Audio(resolveMusicUrl(document.baseURI));
     this.music.loop = true;
@@ -213,6 +243,83 @@ export class GameAudio {
     this.assetPromise = this.loadAssets().then(() => this.startContinuousLayers());
     await Promise.all([musicPlayback, this.assetPromise]);
     if (playIgnition) this.playBuffer('engineStart', { volume: .32, filterType: 'lowpass', filterHz: 4200 });
+  }
+
+  private createTunnelImpulse(durationSeconds = 2.7): AudioBuffer | null {
+    if (!this.context) return null;
+    const sampleRate = this.context.sampleRate;
+    const frameCount = Math.floor(sampleRate * durationSeconds);
+    const impulse = this.context.createBuffer(2, frameCount, sampleRate);
+    let randomState = 0x517cc1b7;
+    const random = (): number => {
+      randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+      return randomState / 4294967296 * 2 - 1;
+    };
+
+    for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+      const data = impulse.getChannelData(channel);
+      let coloredNoise = 0;
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        const time = frame / sampleRate;
+        coloredNoise = coloredNoise * .82 + random() * .18;
+        const decay = Math.exp(-time * 2.35);
+        const density = Math.min(1, time * 38);
+        data[frame] = coloredNoise * decay * density * .68;
+      }
+      const taps = channel === 0
+        ? [[.021, .72], [.049, .46], [.083, .31], [.137, .2]]
+        : [[.028, .68], [.057, .43], [.096, .29], [.151, .18]];
+      for (const [time, gain] of taps) data[Math.floor(time * sampleRate)] += gain;
+    }
+    return impulse;
+  }
+
+  private setupTunnelAcoustics(): void {
+    if (!this.context || !this.master) return;
+    this.effectsBus = this.context.createGain();
+    this.effectsDryGain = this.context.createGain();
+    this.effectsBus.connect(this.effectsDryGain).connect(this.master);
+
+    this.tunnelEarlyGain = this.context.createGain();
+    this.tunnelEarlyGain.gain.value = 0;
+    for (const reflection of [{ delay: .026, pan: -.72, gain: .72 }, { delay: .061, pan: .68, gain: .48 }]) {
+      const delay = this.context.createDelay(.12);
+      delay.delayTime.value = reflection.delay;
+      const filter = this.context.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 720;
+      filter.Q.value = .46;
+      const gain = this.context.createGain();
+      gain.gain.value = reflection.gain;
+      const pan = this.context.createStereoPanner();
+      pan.pan.value = reflection.pan;
+      this.effectsBus.connect(delay).connect(filter).connect(gain).connect(pan).connect(this.tunnelEarlyGain);
+    }
+    this.tunnelEarlyGain.connect(this.master);
+
+    const convolver = this.context.createConvolver();
+    convolver.normalize = true;
+    convolver.buffer = this.createTunnelImpulse();
+    this.tunnelReflectionLowpass = this.context.createBiquadFilter();
+    this.tunnelReflectionLowpass.type = 'lowpass';
+    this.tunnelReflectionLowpass.frequency.value = 5200;
+    this.tunnelReflectionLowpass.Q.value = .42;
+    const lowMidPeak = this.context.createBiquadFilter();
+    lowMidPeak.type = 'peaking';
+    lowMidPeak.frequency.value = 320;
+    lowMidPeak.Q.value = .88;
+    lowMidPeak.gain.value = 4.2;
+    this.tunnelReverbGain = this.context.createGain();
+    this.tunnelReverbGain.gain.value = 0;
+    this.effectsBus.connect(convolver).connect(this.tunnelReflectionLowpass).connect(lowMidPeak).connect(this.tunnelReverbGain).connect(this.master);
+
+    const lowMidBody = this.context.createBiquadFilter();
+    lowMidBody.type = 'bandpass';
+    lowMidBody.frequency.value = 315;
+    lowMidBody.Q.value = .72;
+    this.tunnelLowMidGain = this.context.createGain();
+    this.tunnelLowMidGain.gain.value = 0;
+    this.effectsBus.connect(lowMidBody).connect(this.tunnelLowMidGain).connect(this.master);
   }
 
   private async loadAssets(): Promise<void> {
@@ -247,7 +354,7 @@ export class GameAudio {
   }
 
   private startContinuousLayers(): void {
-    if (!this.context || !this.master || this.engineSources.length) return;
+    if (!this.context || !this.master || !this.effectsBus || this.engineSources.length) return;
 
     for (const option of ENGINE_OPTIONS) {
       const filter = this.context.createBiquadFilter();
@@ -256,7 +363,7 @@ export class GameAudio {
       filter.Q.value = .42;
       const gain = this.context.createGain();
       gain.gain.value = 0;
-      filter.connect(gain).connect(this.master);
+      filter.connect(gain).connect(this.effectsBus);
       const source = this.makeLoop(ENGINE_SOUND_IDS[option], filter, .08);
       if (source) {
         this.engineSources.push(source);
@@ -271,7 +378,7 @@ export class GameAudio {
     this.roadFilter.Q.value = .62;
     this.roadGain = this.context.createGain();
     this.roadGain.gain.value = 0;
-    this.roadFilter.connect(this.roadGain).connect(this.master);
+    this.roadFilter.connect(this.roadGain).connect(this.effectsBus);
     // The source recording includes a long steady asphalt section after its
     // start-up; looping inside it avoids replaying the ignition each cycle.
     this.roadSource = this.makeLoop('roadRoll', this.roadFilter, 22);
@@ -301,7 +408,7 @@ export class GameAudio {
     this.boostFilter.Q.value = .65;
     this.boostGain = this.context.createGain();
     this.boostGain.gain.value = 0;
-    this.boostFilter.connect(this.boostGain).connect(this.master);
+    this.boostFilter.connect(this.boostGain).connect(this.effectsBus);
     this.boostSource = this.makeLoop('windLoop', this.boostFilter, .41);
 
     this.tireScrubFilter = this.context.createBiquadFilter();
@@ -310,7 +417,7 @@ export class GameAudio {
     this.tireScrubFilter.Q.value = 1.45;
     this.tireScrubGain = this.context.createGain();
     this.tireScrubGain.gain.value = 0;
-    this.tireScrubFilter.connect(this.tireScrubGain).connect(this.master);
+    this.tireScrubFilter.connect(this.tireScrubGain).connect(this.effectsBus);
     this.tireScrubSource = this.makeLoop('tireScrub', this.tireScrubFilter, 1.7);
 
     this.tireScreechFilter = this.context.createBiquadFilter();
@@ -319,7 +426,7 @@ export class GameAudio {
     this.tireScreechFilter.Q.value = 1.7;
     this.tireScreechGain = this.context.createGain();
     this.tireScreechGain.gain.value = 0;
-    this.tireScreechFilter.connect(this.tireScreechGain).connect(this.master);
+    this.tireScreechFilter.connect(this.tireScreechGain).connect(this.effectsBus);
     this.tireScreechSource = this.makeLoop('tireScreech', this.tireScreechFilter, .08);
   }
 
@@ -346,7 +453,7 @@ export class GameAudio {
     };
   }
 
-  update(state: VehicleState, _dt: number, running: boolean): void {
+  update(state: VehicleState, _dt: number, running: boolean, tunnelAmount = 0): void {
     if (!this.context) return;
     const now = this.context.currentTime;
     const rpm = Math.min(1, Math.max(0, (state.rpm - 900) / 6900));
@@ -354,6 +461,12 @@ export class GameAudio {
     const shifting = now < this.shiftDuckUntil ? .46 : 1;
     const coast = state.throttle < .09 && state.speedMps > 8 ? 1 : 0;
     const run = running ? 1 : 0;
+    const tunnel = tunnelMixProfile(tunnelAmount);
+    this.effectsDryGain?.gain.setTargetAtTime(tunnel.dryGain, now, .18);
+    this.tunnelEarlyGain?.gain.setTargetAtTime(run * tunnel.earlyReflectionGain, now, .24);
+    this.tunnelReverbGain?.gain.setTargetAtTime(run * tunnel.reverbGain, now, .32);
+    this.tunnelLowMidGain?.gain.setTargetAtTime(run * tunnel.lowMidBodyGain, now, .22);
+    this.tunnelReflectionLowpass?.frequency.setTargetAtTime(tunnel.reflectionLowpassHz, now, .28);
 
     const engineLevel = engineVolumeProfile(state.rpm, state.throttle, coast > 0);
     for (let index = 0; index < this.engineSources.length; index += 1) {
@@ -373,14 +486,14 @@ export class GameAudio {
     const speedAudio = speedAudioProfile(state.speedMph);
     this.windFilter?.frequency.setTargetAtTime(920 + speedAudio.wind * 1900, now, .14);
     this.windFilter?.Q.setTargetAtTime(.43 + speedAudio.wind * .36, now, .17);
-    this.windGain?.gain.setTargetAtTime(run * speedAudio.wind * (.035 + speedAudio.wind * .105), now, .16);
+    this.windGain?.gain.setTargetAtTime(run * tunnel.windExposure * speedAudio.wind * (.035 + speedAudio.wind * .105), now, .16);
     this.musicHighpass?.frequency.setTargetAtTime(running ? speedAudio.musicHighpassHz : 20, now, .45);
 
     this.roadSource?.playbackRate.setTargetAtTime(.84 + rolling * .34, now, .16);
     this.roadFilter?.frequency.setTargetAtTime(320 + rolling * 520, now, .18);
     this.roadGain?.gain.setTargetAtTime(run * (.012 + rolling * .072), now, .13);
     this.cityFilter?.frequency.setTargetAtTime(2450 - speedAudio.wind * 650, now, .5);
-    this.cityGain?.gain.setTargetAtTime(run * (.022 - speedAudio.wind * .007), now, .8);
+    this.cityGain?.gain.setTargetAtTime(run * tunnel.exteriorAmbience * (.022 - speedAudio.wind * .007), now, .8);
 
     const tires = tireAudioProfile(state.tireSlip, state.speedMps, state.handbrakeActive, state.brake);
     this.tireScrubSource?.playbackRate.setTargetAtTime(.82 + rolling * .24 + tires.scrub * .13, now, .055);
@@ -492,7 +605,7 @@ export class GameAudio {
     const pan = this.context.createStereoPanner();
     pan.pan.setValueAtTime(Math.sign(side) * .94, now);
     pan.pan.linearRampToValueAtTime(Math.sign(side) * .24, now + profile.duration);
-    source.connect(filter).connect(gain).connect(pan).connect(this.master);
+    source.connect(filter).connect(gain).connect(pan).connect(this.effectsBus ?? this.master);
     const offset = Math.min(Math.max(0, buffer.duration - profile.duration * startRate - .05), buffer.duration * .42);
     source.start(now, offset, Math.min(buffer.duration - offset, profile.duration * startRate));
     source.stop(now + profile.duration + .04);
@@ -550,7 +663,7 @@ export class GameAudio {
     const gain = this.context.createGain();
     const pan = this.context.createStereoPanner();
     pan.pan.value = Math.min(1, Math.max(-1, options.pan ?? 0));
-    source.connect(filter).connect(gain).connect(pan).connect(this.master);
+    source.connect(filter).connect(gain).connect(pan).connect(this.effectsBus ?? this.master);
 
     const startAt = this.context.currentTime + (options.delay ?? 0);
     const offset = Math.min(Math.max(0, options.offset ?? 0), Math.max(0, buffer.duration - .01));

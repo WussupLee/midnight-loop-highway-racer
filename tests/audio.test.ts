@@ -11,6 +11,7 @@ import {
   speedAudioProfile,
   tireAudioProfile,
   trafficPassProfile,
+  tunnelMixProfile,
 } from '../src/game/audio';
 
 describe('hosted music path', () => {
@@ -99,5 +100,26 @@ describe('speed-dependent atmosphere', () => {
     expect(closeFastPass.airGain).toBeGreaterThan(distantSlowPass.airGain);
     expect(closeFastPass.bodyGain).toBeGreaterThan(distantSlowPass.bodyGain);
     expect(closeFastPass.duration).toBeLessThan(distantSlowPass.duration);
+  });
+});
+
+describe('tunnel acoustics', () => {
+  it('adds filtered reflections and low-mid body while suppressing exterior ambience', () => {
+    const openRoad = tunnelMixProfile(0);
+    const tunnel = tunnelMixProfile(1);
+    expect(openRoad.earlyReflectionGain).toBe(0);
+    expect(openRoad.reverbGain).toBe(0);
+    expect(tunnel.dryGain).toBeGreaterThan(openRoad.dryGain);
+    expect(tunnel.earlyReflectionGain).toBeGreaterThan(0);
+    expect(tunnel.reverbGain).toBeGreaterThan(tunnel.earlyReflectionGain);
+    expect(tunnel.lowMidBodyGain).toBeGreaterThan(0);
+    expect(tunnel.reflectionLowpassHz).toBeLessThan(openRoad.reflectionLowpassHz);
+    expect(tunnel.exteriorAmbience).toBeLessThan(.2);
+    expect(tunnel.windExposure).toBeLessThan(openRoad.windExposure);
+  });
+
+  it('clamps invalid enclosure values', () => {
+    expect(tunnelMixProfile(-2)).toEqual(tunnelMixProfile(0));
+    expect(tunnelMixProfile(4)).toEqual(tunnelMixProfile(1));
   });
 });
