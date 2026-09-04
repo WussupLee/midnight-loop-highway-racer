@@ -84,7 +84,7 @@ The traffic horn is adapted in playback only (level, stereo position, filtering,
 
 ## Vehicle asset
 
-The KITSUNE R-SPEC uses the four-wheel **Sports** mesh from Rgsdev's [Low Poly Vehicle Pack](https://rgsdev.itch.io/free-low-poly-vehicle-pack), released under the [CC0 1.0 public-domain dedication](https://creativecommons.org/publicdomain/zero/1.0/). The mesh is restyled in-game with original materials, lamps, aero parts, and effects. See `public/models/ATTRIBUTIONS.md` for the bundled-asset record.
+The KITSUNE R-SPEC uses Quaternius's complete [Sports Car model](https://poly.pizza/m/OyqKvX9xNh) from the creator's [Cars Pack](https://quaternius.com/packs/cars.html), released under the [CC0 1.0 public-domain dedication](https://creativecommons.org/publicdomain/zero/1.0/). The intact authored body, windows, lamps, bumpers, and wheel geometry are retained; the game restyles its materials, rigs its wheel objects, and adds lighting effects. See `public/models/ATTRIBUTIONS.md` for the bundled-asset record.
 
 ## Physics approach
 

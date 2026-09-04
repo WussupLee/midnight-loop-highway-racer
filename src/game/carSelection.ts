@@ -20,7 +20,7 @@ export const CAR_DEFINITIONS: readonly CarDefinition[] = [
     id: 'kitsune-r-spec',
     name: 'KITSUNE R-SPEC',
     classLabel: 'IMPORT // NIGHT SPEC',
-    description: 'Low coupe · wide stance · independent wheel rig',
+    description: 'Authored coupe · intact body · animated wheel rig',
   },
 ] as const;
 

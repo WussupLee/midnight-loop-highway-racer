@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { VehicleState } from './vehicle';
 import { roadCenterY } from './world';
 import { createLoftGeometry, createSoftGlowTexture, createTailLightGlowTexture } from './vehicleMeshes';
@@ -367,67 +367,66 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
   };
 }
 
-/**
- * Loads the lightweight CC0 sports-car shell used for KITSUNE R-SPEC and
- * supplies the same runtime visual contract as the original procedural car.
- * Gameplay still owns the pose and physics; this function only swaps art.
- */
+/** Loads Quaternius's complete CC0 Sports Car while gameplay continues to own
+ * every physical state. Only materials and non-geometric lighting effects are
+ * added here; the authored body, lamps, glass, wheels, and bumpers stay intact. */
 export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVisual> {
-  const sourceUrl = new URL('models/kitsune-r-spec.fbx', document.baseURI).href;
-  const source = await new FBXLoader().loadAsync(sourceUrl);
+  const sourceUrl = new URL('models/kitsune-r-spec.glb', document.baseURI).href;
+  const source = (await new GLTFLoader().loadAsync(sourceUrl)).scene;
   const group = new THREE.Group();
   group.name = 'Kitsune R-Spec player coupe';
-  source.name = 'Kitsune R-Spec CC0 base shell';
-  source.scale.setScalar(.008);
+  group.scale.setScalar(1.12);
+  source.name = 'Quaternius CC0 Sports Car';
   group.add(source);
 
   const paint = new THREE.MeshPhysicalMaterial({
-    color: 0x293444,
+    name: 'Kitsune gunmetal paint',
+    color: 0x354152,
     emissive: 0x05070d,
-    emissiveIntensity: .28,
-    metalness: .76,
-    roughness: .2,
-    clearcoat: .95,
-    clearcoatRoughness: .13,
-    envMapIntensity: 1.8,
+    emissiveIntensity: .18,
+    metalness: .72,
+    roughness: .22,
+    clearcoat: .94,
+    clearcoatRoughness: .14,
+    envMapIntensity: 1.7,
   });
-  const carbon = new THREE.MeshStandardMaterial({ color: 0x030509, metalness: .68, roughness: .24 });
+  const lowerPaint = new THREE.MeshStandardMaterial({ color: 0x111722, metalness: .7, roughness: .28 });
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x0a101b,
-    metalness: .35,
-    roughness: .12,
-    transmission: .07,
+    color: 0x090e18,
+    metalness: .3,
+    roughness: .13,
+    transmission: .06,
     transparent: true,
-    opacity: .91,
-    envMapIntensity: 1.5,
+    opacity: .92,
+    envMapIntensity: 1.55,
   });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x05070a, metalness: .45, roughness: .4 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x69717e, metalness: .9, roughness: .22 });
   const headlampMaterial = new THREE.MeshStandardMaterial({
     color: 0xe8efff,
     emissive: 0xdce8ff,
     emissiveIntensity: 3.2,
-    roughness: .18,
+    roughness: .16,
   });
-  const importedTailMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8c0b20,
+  const tailMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9a0c26,
     emissive: 0xff173d,
-    emissiveIntensity: 1.3,
-    roughness: .25,
+    emissiveIntensity: 1.65,
+    roughness: .22,
   });
-  const rimMaterial = new THREE.MeshStandardMaterial({ color: 0x242938, metalness: .92, roughness: .21 });
-  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x010204, metalness: .08, roughness: .72 });
   const materialFor = (material: THREE.Material): THREE.Material => {
-    const name = material.name.toLowerCase();
-    if (name.includes('window')) return glass;
-    if (name.includes('headlight')) return headlampMaterial;
-    if (name.includes('rear light')) return importedTailMaterial;
-    if (name.includes('tire')) return tireMaterial;
-    if (name.includes('wheel')) return rimMaterial;
-    if (name.includes('black')) return carbon;
-    return paint;
+    switch (material.name.toLowerCase()) {
+      case 'orange': return paint;
+      case 'darkorange': return lowerPaint;
+      case 'windows': return glass;
+      case 'grey': return metal;
+      case 'headlights': return headlampMaterial;
+      case 'taillights': return tailMaterial;
+      case 'black': return trim;
+      default: return material;
+    }
   };
 
-  const wheels: THREE.Mesh[] = [];
-  const frontPivots: THREE.Group[] = [];
   const wheelMeshes: THREE.Mesh[] = [];
   source.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -438,74 +437,43 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
       : materialFor(object.material);
     if (object.name.toLowerCase().includes('wheel')) wheelMeshes.push(object);
   });
+
+  // Every authored wheel object gets a pivot at its actual geometry center.
+  // The rear pair is one axle mesh in the source; both front wheels steer and
+  // roll separately while the complete body remains untouched.
+  const wheels: THREE.Mesh[] = [];
+  const frontPivots: THREE.Group[] = [];
   for (const wheel of wheelMeshes) {
     const parent = wheel.parent;
     if (!parent) continue;
+    wheel.geometry.computeBoundingBox();
+    const center = wheel.geometry.boundingBox?.getCenter(new THREE.Vector3()) ?? new THREE.Vector3();
     const pivot = new THREE.Group();
-    pivot.name = `${wheel.name} steering pivot`;
-    pivot.position.copy(wheel.position);
+    pivot.name = `${wheel.name} authored pivot`;
+    pivot.position.copy(center);
     parent.add(pivot);
     parent.remove(wheel);
-    wheel.position.set(0, 0, 0);
-    wheel.scale.multiplyScalar(1.08);
+    wheel.position.sub(center);
     pivot.add(wheel);
     wheels.push(wheel);
     if (wheel.name.toLowerCase().includes('front')) frontPivots.push(pivot);
   }
 
-  // Period tuner additions make the clean CC0 shell echo the low/wide reference
-  // without carrying over any real-world badging or the reference's messy underside.
-  for (const x of [-1.02, 1.02]) {
-    group.add(box(.11, .13, 2.85, carbon, x, .18, -.03));
-    group.add(box(.15, .2, 1.1, paint, x * .98, .47, -1.3));
-  }
-  group.add(box(1.6, .055, .26, carbon, 0, 1.31, -1.75));
-  for (const x of [-.42, .42]) {
-    const mount = box(.075, .38, .12, carbon, x, 1.11, -1.7);
-    mount.rotation.x = .06;
-    group.add(mount);
-  }
-  for (const x of [-.83, .83]) group.add(box(.035, .17, .29, carbon, x, 1.31, -1.75));
-  group.add(box(1.28, .07, .22, carbon, 0, .12, -2.18));
-
   const brakeLights: THREE.Mesh[] = [];
   const brakeGlows: THREE.Sprite[] = [];
   const tailTexture = createTailLightGlowTexture('#ff1238');
-  const lampLayout = [
-    { x: -.68, radius: .145 }, { x: -.39, radius: .105 },
-    { x: .39, radius: .105 }, { x: .68, radius: .145 },
-  ];
-  for (const { x, radius } of lampLayout) {
-    const housing = new THREE.Mesh(new THREE.CylinderGeometry(radius + .04, radius + .04, .065, 12), carbon);
-    housing.rotation.x = Math.PI / 2;
-    housing.position.set(x, .65, -2.295);
-    group.add(housing);
-    const lensMaterial = importedTailMaterial.clone();
-    const lens = new THREE.Mesh(new THREE.TorusGeometry(radius * .67, radius * .24, 6, 16), lensMaterial);
-    lens.position.set(x, .65, -2.34);
-    lens.renderOrder = 3;
-    group.add(lens);
-    brakeLights.push(lens);
-    const center = new THREE.Mesh(
-      new THREE.CircleGeometry(radius * .5, 12),
-      new THREE.MeshStandardMaterial({ color: 0x24030a, emissive: 0x3b020b, emissiveIntensity: .38 }),
-    );
-    center.position.set(x, .65, -2.345);
-    center.rotation.y = Math.PI;
-    group.add(center);
+  for (const x of [-.44, .44]) {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: tailTexture,
       color: 0xff173f,
       transparent: true,
-      opacity: .33,
+      opacity: .3,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       toneMapped: false,
     }));
-    glow.position.set(x, .65, -2.37);
-    const glowSize = radius * 2.8;
-    glow.scale.set(glowSize, glowSize, 1);
-    glow.userData.baseSize = glowSize;
+    glow.position.set(x, .67, -1.9);
+    glow.scale.set(.44, .34, 1);
     glow.renderOrder = 4;
     group.add(glow);
     brakeGlows.push(glow);
@@ -515,45 +483,39 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
     map: createSoftGlowTexture('#7179ff'),
     color: 0x9d98ff,
     transparent: true,
-    opacity: .48,
+    opacity: .45,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     toneMapped: false,
   });
-  const underglow = new THREE.Mesh(new THREE.PlaneGeometry(3.55, 5.6), glowMaterial);
+  const underglow = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 4.65), glowMaterial);
   underglow.rotation.x = -Math.PI / 2;
-  underglow.position.y = .07;
+  underglow.position.y = .055;
   group.add(underglow);
-  const groundGlow = new THREE.PointLight(0x777cff, 1.15, 5.5, 2);
-  groundGlow.position.set(0, .18, -.05);
+  const groundGlow = new THREE.PointLight(0x777cff, 1.08, 5.2, 2);
+  groundGlow.position.set(0, .17, -.05);
   group.add(groundGlow);
 
-  const boostFlames: THREE.Mesh[] = [];
-  for (const x of [-.52, .52]) {
-    const exhaust = new THREE.Mesh(
-      new THREE.CylinderGeometry(.065, .095, .25, 12),
-      new THREE.MeshStandardMaterial({ color: 0x8e9299, metalness: 1, roughness: .17 }),
-    );
-    exhaust.rotation.x = Math.PI / 2;
-    exhaust.position.set(x, .18, -2.35);
-    group.add(exhaust);
-    const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(.12, .92, 10, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x83ffb5, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-    );
-    flame.rotation.x = -Math.PI / 2;
-    flame.position.set(x, .18, -2.78);
-    flame.visible = false;
-    group.add(flame);
-    boostFlames.push(flame);
-  }
+  const boostGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createSoftGlowTexture('#62ff9d'),
+    color: 0x77ffab,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  }));
+  boostGlow.position.set(0, .2, -2.03);
+  boostGlow.scale.set(1.05, .55, 1);
+  boostGlow.visible = false;
+  group.add(boostGlow);
 
   const headlights: THREE.SpotLight[] = [];
   const headlightTargets: THREE.Object3D[] = [];
   const target = new THREE.Object3D();
   target.position.set(0, -1.7, 30);
   const headlight = new THREE.SpotLight(0xffedc8, 520, 68, .66, .995, 1.7);
-  headlight.position.set(0, .66, 2.28);
+  headlight.position.set(0, .52, 1.9);
   headlight.target = target;
   headlight.castShadow = false;
   group.add(target, headlight);
@@ -563,7 +525,6 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
   scene.add(group);
   let visualRoll = 0;
   let visualPitch = 0;
-  let flamePhase = 0;
   return {
     group, wheels, frontPivots, brakeLights, underglow, headlights, headlightTargets,
     update(state, braking, dt) {
@@ -575,27 +536,17 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
       visualPitch += (targetPitch - visualPitch) * Math.min(1, dt * 7.5);
       group.rotation.z = clampVisual(visualRoll, -.095, .095);
       group.rotation.x = visualPitch;
-      for (const wheel of wheels) wheel.rotateX(-state.longitudinalSpeed * dt / .34);
+      for (const wheel of wheels) wheel.rotateX(-state.longitudinalSpeed * dt / .29);
       for (const pivot of frontPivots) pivot.rotation.y = state.steerAngle;
-      for (const light of brakeLights) {
-        const material = light.material as THREE.MeshStandardMaterial;
-        material.color.setHex(braking ? 0xff2747 : 0x8d0b23);
-        material.emissiveIntensity = braking ? 5.6 : 1.8;
-      }
+      tailMaterial.color.setHex(braking ? 0xff2747 : 0x9a0c26);
+      tailMaterial.emissiveIntensity = braking ? 5.6 : 1.65;
       for (const glow of brakeGlows) {
-        (glow.material as THREE.SpriteMaterial).opacity = braking ? .74 : .33;
-        const baseSize = Number(glow.userData.baseSize ?? .38);
-        const size = baseSize * (braking ? 1.43 : 1);
-        glow.scale.set(size, size, 1);
+        (glow.material as THREE.SpriteMaterial).opacity = braking ? .72 : .3;
+        glow.scale.set(braking ? .58 : .44, braking ? .44 : .34, 1);
       }
-      (underglow.material as THREE.MeshBasicMaterial).opacity = state.boostActive ? .64 : .48;
-      flamePhase += dt * (30 + state.rpm * .002);
-      const pulse = .9 + Math.sin(flamePhase) * .1;
-      for (const flame of boostFlames) {
-        flame.visible = state.boostActive;
-        flame.scale.set(.85 + pulse * .15, .75 + pulse * .65, .85 + pulse * .15);
-        (flame.material as THREE.MeshBasicMaterial).opacity = state.boostActive ? .74 : 0;
-      }
+      (underglow.material as THREE.MeshBasicMaterial).opacity = state.boostActive ? .62 : .45;
+      boostGlow.visible = state.boostActive;
+      (boostGlow.material as THREE.SpriteMaterial).opacity = state.boostActive ? .72 : 0;
       headlight.intensity = state.boostActive ? 600 : 520;
     },
   };

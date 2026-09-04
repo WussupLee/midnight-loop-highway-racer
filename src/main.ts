@@ -572,9 +572,18 @@ function updateShowroom(dt: number, now: number): void {
   playerCar.group.rotation.x = 0;
   playerCar.group.rotation.z = 0;
   const roadY = roadCenterY(showroomVehicle.z);
-  camera.position.set(showroomVehicle.x + 5.4, roadY + 2.2, showroomVehicle.z - 6.25);
-  camera.lookAt(showroomVehicle.x, roadY + .66, showroomVehicle.z);
-  camera.fov += (47 - camera.fov) * Math.min(1, dt * 7);
+  const portraitShowroom = MOBILE_DEVICE && innerHeight > innerWidth;
+  if (portraitShowroom) {
+    // Aim below the axle line to lift the car clear of the selector while also
+    // bringing it closer in the narrow mobile viewport.
+    camera.position.set(showroomVehicle.x + 4.55, roadY + 2.25, showroomVehicle.z - 5.35);
+    camera.lookAt(showroomVehicle.x, roadY - .16, showroomVehicle.z);
+  } else {
+    camera.position.set(showroomVehicle.x + 5.4, roadY + 2.2, showroomVehicle.z - 6.25);
+    camera.lookAt(showroomVehicle.x, roadY + .66, showroomVehicle.z);
+  }
+  const showroomFov = portraitShowroom ? 43 : 47;
+  camera.fov += (showroomFov - camera.fov) * Math.min(1, dt * 7);
   camera.updateProjectionMatrix();
 }
 

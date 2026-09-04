@@ -410,9 +410,9 @@ details { border-color: rgba(184,180,241,.18); } summary::after { color: var(--u
   .menu-screen h1 { font-size: clamp(44px, 15vw, 68px); }
   .menu-screen .tagline { margin-top: 13px; }
   .menu-screen .route-data { display: none; }
-  .car-showcase { height: clamp(245px, 38vh, 360px); }
-  .car-drag-surface { inset: 0 0 83px; }
-  .car-selector { bottom: 18px; width: 100%; grid-template-columns: 52px 1fr 52px; }
+  .car-showcase { height: clamp(285px, 43vh, 390px); margin-top: -22px; margin-bottom: -12px; }
+  .car-drag-surface { inset: 0 0 94px; }
+  .car-selector { bottom: 0; width: 100%; grid-template-columns: 52px 1fr 52px; }
   .car-identity { padding-inline: 6px; }
   .car-identity h2 { font-size: 20px; }
   .car-identity p { display: none; }

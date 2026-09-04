@@ -1,14 +1,15 @@
 # Vehicle model attribution
 
-## KITSUNE R-SPEC base mesh
+## KITSUNE R-SPEC model
 
-- Source: **Sports** from **Free Low Poly Vehicles Pack**
-- Creator: **Rgsdev**
-- Source page: https://opengameart.org/content/free-low-poly-vehicles-pack
+- Source: **Sports Car** from **Cars Pack**
+- Creator: **Quaternius**
+- Creator page: https://quaternius.com/packs/cars.html
+- Download mirror: https://poly.pizza/m/OyqKvX9xNh
 - License: **CC0 1.0 Universal**
-- Changes: Rescaled and materially restyled; lighting, lamp geometry, wheel rigging,
-  body-kit details, spoiler, underglow, and the fictional KITSUNE identity were
-  created for MIDNIGHT LOOP.
+- Changes: Materials were restyled and the authored wheel objects were rigged for
+  runtime roll and steering. Non-geometric headlight, brake glow, boost glow, and
+  underglow effects were added for MIDNIGHT LOOP. The complete original body,
+  window, lamp, bumper, and wheel geometry is retained.
 
-The model contains no Nissan branding and is presented as an original fictional
-vehicle.
+The model is unbranded and is presented under the fictional KITSUNE identity.
