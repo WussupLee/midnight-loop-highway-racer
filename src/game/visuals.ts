@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { animateWheels, isolateBody, rigImportedWheels, type WheelRig } from './wheelRig';
 import type { VehicleState } from './vehicle';
 import { roadCenterY } from './world';
 import { createLoftGeometry, createSoftGlowTexture, createTailLightGlowTexture } from './vehicleMeshes';
@@ -275,6 +276,7 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
   const rimMaterial = new THREE.MeshStandardMaterial({ color: 0x252b30, metalness: .9, roughness: .23, envMapIntensity: 1.35 });
   const tireGeometry = new THREE.CylinderGeometry(.39, .39, .205, 16);
   const rimGeometry = new THREE.CylinderGeometry(.265, .265, .125, 10);
+  const wheelRigs: WheelRig[] = [];
   const wheels: THREE.Mesh[] = [];
   const frontPivots: THREE.Group[] = [];
   for (const z of [-1.48, 1.45]) {
@@ -286,7 +288,10 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
       wheel.rotation.z = Math.PI / 2;
       const rim = new THREE.Mesh(rimGeometry, rimMaterial);
       wheel.add(rim);
-      pivot.add(wheel);
+      const spin = new THREE.Group();
+      spin.add(wheel);
+      pivot.add(spin);
+      wheelRigs.push({ hub: pivot, spin, radius: .39, front: z > 0, meshes: [wheel] });
       group.add(pivot);
       wheels.push(wheel);
       if (z > 0) frontPivots.push(pivot);
@@ -314,6 +319,7 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
   headlights.push(headlight);
   headlightTargets.push(headlightTarget);
 
+  const sprungBody = isolateBody(group, [...wheelRigs.map(rig => rig.hub), underglow, ...headlightTargets]);
   scene.add(group);
   let visualRoll = 0;
   let visualPitch = 0;
@@ -328,10 +334,9 @@ export function createPlayerCar(scene: THREE.Scene): PlayerCarVisual {
       const targetPitch = clampVisual(-state.lastLongAccel * .009, -.045, .055);
       visualRoll += (targetRoll - visualRoll) * Math.min(1, dt * 6.5);
       visualPitch += (targetPitch - visualPitch) * Math.min(1, dt * 7.5);
-      group.rotation.z = clampVisual(visualRoll, -.095, .095);
-      group.rotation.x = visualPitch;
-      for (const wheel of wheels) wheel.rotation.x -= state.longitudinalSpeed * dt / .39;
-      for (const pivot of frontPivots) pivot.rotation.y = state.steerAngle;
+      sprungBody.rotation.z = clampVisual(visualRoll, -.06, .06);
+      sprungBody.rotation.x = visualPitch;
+      animateWheels(wheelRigs, state.longitudinalSpeed, state.steerAngle, state.handbrakeActive, dt);
       for (const light of brakeLights) {
         const material = light.material as THREE.MeshStandardMaterial;
         material.color.setHex(braking ? 0xff2747 : 0x8d0b23);
@@ -427,7 +432,6 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
     }
   };
 
-  const wheelMeshes: THREE.Mesh[] = [];
   source.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
     object.castShadow = true;
@@ -435,29 +439,11 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
     object.material = Array.isArray(object.material)
       ? object.material.map(materialFor)
       : materialFor(object.material);
-    if (object.name.toLowerCase().includes('wheel')) wheelMeshes.push(object);
   });
 
-  // Every authored wheel object gets a pivot at its actual geometry center.
-  // The rear pair is one axle mesh in the source; both front wheels steer and
-  // roll separately while the complete body remains untouched.
-  const wheels: THREE.Mesh[] = [];
-  const frontPivots: THREE.Group[] = [];
-  for (const wheel of wheelMeshes) {
-    const parent = wheel.parent;
-    if (!parent) continue;
-    wheel.geometry.computeBoundingBox();
-    const center = wheel.geometry.boundingBox?.getCenter(new THREE.Vector3()) ?? new THREE.Vector3();
-    const pivot = new THREE.Group();
-    pivot.name = `${wheel.name} authored pivot`;
-    pivot.position.copy(center);
-    parent.add(pivot);
-    parent.remove(wheel);
-    wheel.position.sub(center);
-    pivot.add(wheel);
-    wheels.push(wheel);
-    if (wheel.name.toLowerCase().includes('front')) frontPivots.push(pivot);
-  }
+  const wheelRigs = rigImportedWheels(group);
+  const wheels = wheelRigs.flatMap(rig => rig.meshes);
+  const frontPivots = wheelRigs.filter(rig => rig.front).map(rig => rig.hub);
 
   const brakeLights: THREE.Mesh[] = [];
   const brakeGlows: THREE.Sprite[] = [];
@@ -522,6 +508,7 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
   headlights.push(headlight);
   headlightTargets.push(target);
 
+  const sprungBody = isolateBody(group, [...wheelRigs.map(rig => rig.hub), underglow, ...headlightTargets]);
   scene.add(group);
   let visualRoll = 0;
   let visualPitch = 0;
@@ -534,10 +521,9 @@ export async function createKitsuneCar(scene: THREE.Scene): Promise<PlayerCarVis
       const targetPitch = clampVisual(-state.lastLongAccel * .009, -.045, .055);
       visualRoll += (targetRoll - visualRoll) * Math.min(1, dt * 6.5);
       visualPitch += (targetPitch - visualPitch) * Math.min(1, dt * 7.5);
-      group.rotation.z = clampVisual(visualRoll, -.095, .095);
-      group.rotation.x = visualPitch;
-      for (const wheel of wheels) wheel.rotateX(-state.longitudinalSpeed * dt / .29);
-      for (const pivot of frontPivots) pivot.rotation.y = state.steerAngle;
+      sprungBody.rotation.z = clampVisual(visualRoll, -.06, .06);
+      sprungBody.rotation.x = visualPitch;
+      animateWheels(wheelRigs, state.longitudinalSpeed, state.steerAngle, state.handbrakeActive, dt, group.scale.x);
       tailMaterial.color.setHex(braking ? 0xff2747 : 0x9a0c26);
       tailMaterial.emissiveIntensity = braking ? 5.6 : 1.65;
       for (const glow of brakeGlows) {

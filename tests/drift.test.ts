@@ -25,7 +25,8 @@ describe('drift scoring', () => {
     expect(state.active).toBe(true);
     expect(state.angleDeg).toBeGreaterThan(10);
     expect(state.radiusM).toBeGreaterThan(5);
-    expect(total).toBeGreaterThan(90);
+    expect(total).toBe(0);
+    expect(state.points).toBeGreaterThan(90);
   });
 
   it('starts awarding a deliberate drift within a quarter second', () => {
@@ -40,7 +41,8 @@ describe('drift scoring', () => {
       total += update.scoreDelta;
     }
     expect(state.duration).toBeGreaterThan(.2);
-    expect(total).toBeGreaterThan(0);
+    expect(total).toBe(0);
+    expect(state.points).toBeGreaterThan(0);
   });
 
   it('recognizes a shallow handbrake rotation before the car is fully sideways', () => {
@@ -56,10 +58,11 @@ describe('drift scoring', () => {
     }
     expect(state.active).toBe(true);
     expect(state.angleDeg).toBeLessThan(7);
-    expect(total).toBeGreaterThan(0);
+    expect(total).toBe(0);
+    expect(state.points).toBeGreaterThan(0);
   });
 
-  it('commits one completion bonus after a sustained drift ends', () => {
+  it('banks the full pending score once after clean recovery', () => {
     let state = createDriftState();
     for (let frame = 0; frame < 100; frame += 1) {
       state = updateDrift(state, {
@@ -67,11 +70,12 @@ describe('drift scoring', () => {
         handbrake: true, now: frame / 60, dt: 1 / 60, multiplier: 1,
       }).state;
     }
+    const expectedPoints = Math.round(state.points + state.pendingPoints);
     const ending = updateDrift(state, {
       speedMps: 40, longitudinalSpeed: 40, lateralSpeed: 1, yawRate: .03,
-      handbrake: false, now: 2, dt: 1 / 60, multiplier: 1,
+      handbrake: false, now: 2, dt: .35, multiplier: 1,
     });
-    expect(ending.completedPoints).toBeGreaterThanOrEqual(90);
+    expect(ending.completedPoints).toBe(expectedPoints);
     expect(ending.state.active).toBe(false);
     const next = updateDrift(ending.state, {
       speedMps: 40, longitudinalSpeed: 40, lateralSpeed: 1, yawRate: .03,

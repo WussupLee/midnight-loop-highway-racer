@@ -40,6 +40,8 @@ export interface VehicleState extends VehicleTelemetry {
   lastLongAccel: number;
   shiftTimer: number;
   collisionCooldown: number;
+  driftBlend: number;
+  handlingPhase: 'grip' | 'initiation' | 'slide' | 'recovery';
 }
 
 export interface VehicleStepResult {
@@ -58,7 +60,12 @@ export function digitalSteer(leftPressed: boolean, rightPressed: boolean): numbe
   return Number(leftPressed) - Number(rightPressed);
 }
 
-const MASS = 1360;
+export const HANDLING = {
+  mass: 1360, throttleResponse: 14, releaseResponse: 9, shiftUpRpm: 7200,
+  shiftDownRpm: 2600, kickdownRpm: 4300, gripRecoverySeconds: .6,
+  fatalClosingSpeed: 30, restitution: .08,
+} as const;
+const MASS = HANDLING.mass;
 const GRAVITY = 9.81;
 const WHEELBASE = 2.62;
 const FRONT_ARM = 1.08;
@@ -99,33 +106,29 @@ export function createVehicleState(): VehicleState {
     speedMps: speed, speedMph: speed * 2.236936, longitudinalSpeed: speed, lateralSpeed: 0,
     rpm: 4300, gear: 3, steerAngle: 0, frontSlip: 0, rearSlip: 0, tireSlip: 0,
     handbrakeActive: false, boostActive: false, boost: 0.55, forceLongitudinal: 0, forceLateral: 0,
-    collisionCooldown: 0,
+    collisionCooldown: 0, driftBlend: 0, handlingPhase: 'grip',
   };
 }
 
 function selectGear(state: VehicleState, dt: number): void {
   state.shiftTimer = Math.max(0, state.shiftTimer - dt);
   if (state.shiftTimer > 0) return;
-  if (state.rpm > 7350 && state.gear < 6) {
+  if (state.rpm > HANDLING.shiftUpRpm && state.gear < 6) {
     state.gear += 1;
-    state.shiftTimer = 0.18;
-  } else if (state.rpm < 2550 && state.gear > 1) {
+    state.shiftTimer = 0.16;
+  } else if ((state.rpm < HANDLING.shiftDownRpm || (state.throttle > .7 && state.rpm < HANDLING.kickdownRpm && state.rpm * GEARS[state.gear - 1] / GEARS[state.gear] < 6500)) && state.gear > 1) {
     state.gear -= 1;
-    state.shiftTimer = 0.14;
+    state.shiftTimer = 0.12;
   }
 }
 
-export function applyCollisionImpulse(state: VehicleState, normalX: number, normalZ: number, severity: number, scrape = false): void {
-  const alongNormal = state.vx * normalX + state.vz * normalZ;
-  const impulse = scrape
-    ? Math.max(1.1, severity * .14 + Math.abs(alongNormal) * .32)
-    : Math.max(4, severity * 0.42 + Math.abs(alongNormal) * 0.72);
+export function applyCollisionImpulse(state: VehicleState, normalX: number, normalZ: number, closingSpeed: number, scrape = false, lever = 0): void {
+  const impulse = Math.min(scrape ? 4 : 26, Math.max(0, closingSpeed) * (1 + HANDLING.restitution));
   state.vx -= normalX * impulse;
   state.vz -= normalZ * impulse;
-  state.yawRate += scrape
-    ? -Math.sign(normalX || 1) * Math.min(.13, severity * .006)
-    : (Math.random() - 0.5) * Math.min(2.2, severity * 0.045);
+  state.yawRate += clamp(lever * impulse * MASS / YAW_INERTIA, scrape ? -.10 : -.45, scrape ? .10 : .45);
   state.collisionCooldown = scrape ? .28 : .42;
+  refreshVehicleTelemetry(state);
 }
 
 export function recoverVehicle(state: VehicleState): void {
@@ -137,6 +140,9 @@ export function recoverVehicle(state: VehicleState): void {
   state.vz = Math.cos(heading) * speed;
   state.yawRate = 0;
   state.steering = 0;
+  state.driftBlend = 0;
+  state.handlingPhase = 'grip';
+  refreshVehicleTelemetry(state);
 }
 
 export function stepVehicle(state: VehicleState, input: DriverInput, dt: number): VehicleStepResult {
@@ -149,8 +155,13 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   const v = state.vx * rightX + state.vz * rightZ;
   const speed = Math.hypot(state.vx, state.vz);
 
+  const bodyAngle = Math.atan2(Math.abs(v), Math.max(4, Math.abs(u)));
+  const slideTarget = input.handbrake ? 1 : state.driftBlend > .2 && bodyAngle > .105 ? .55 : 0;
+  state.driftBlend += (slideTarget - state.driftBlend) * Math.min(1, dt / (input.handbrake ? .10 : HANDLING.gripRecoverySeconds));
+  const assist = 1 - state.driftBlend;
+  state.handlingPhase = input.handbrake ? 'initiation' : state.driftBlend > .25 && bodyAngle > .07 ? 'slide' : state.driftBlend > .05 ? 'recovery' : 'grip';
   const highSpeedSteer = clamp((speed - 22) / 52, 0, 1);
-  const over120Stability = input.handbrake ? 0 : clamp((speed - 53.64) / 18, 0, 1);
+  const over120Stability = assist * clamp((speed - 53.64) / 18, 0, 1);
   // A keyboard reversal needs to pass through center promptly. A slow
   // left-to-right crossover leaves the front wheels pointing into the old
   // turn while the driver is already requesting the opposite lane, which
@@ -164,17 +175,19 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
     : 3.8 - highSpeedSteer * .55 + (steeringInputReversal ? 5.8 : 0);
   const steerRate = input.steer === 0 ? 7.2 : activeSteerRate;
   state.steering += (input.steer - state.steering) * Math.min(1, steerRate * dt);
-  state.throttle += (input.throttle - state.throttle) * Math.min(1, 7.2 * dt);
+  state.throttle += (input.throttle - state.throttle) * Math.min(1, (input.throttle > state.throttle ? HANDLING.throttleResponse : HANDLING.releaseResponse) * dt);
   state.brake += (input.brake - state.brake) * Math.min(1, 8 * dt);
   const maxSteer = speedSensitiveSteer(speed);
-  const serviceBrakeStability = state.brake * (input.handbrake ? 0 : 1);
+  const serviceBrakeStability = state.brake * assist;
   const steerAngle = state.steering * maxSteer * (1 - serviceBrakeStability * .2);
 
   const wheelAngular = Math.max(0, Math.abs(u) / WHEEL_RADIUS);
-  const ratio = GEARS[state.gear] * FINAL_DRIVE;
+  let ratio = GEARS[state.gear] * FINAL_DRIVE;
   const coupledRpm = wheelAngular * ratio * 60 / (2 * Math.PI);
   state.rpm = clamp(coupledRpm, 900, 7800);
   selectGear(state, dt);
+  ratio = GEARS[state.gear] * FINAL_DRIVE;
+  state.rpm = clamp(wheelAngular * ratio * 60 / (2 * Math.PI), 900, 7800);
 
   const boostActive = input.boost && state.boost > 0.01 && u > 14;
   state.boost = clamp(state.boost + (boostActive ? -0.19 : 0.012) * dt, 0, 1);
@@ -193,28 +206,29 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   const signU = u === 0 ? 0 : Math.sign(u);
   const drag = 0.5 * 1.225 * 0.68 * u * Math.abs(u);
   const rolling = 0.014 * MASS * GRAVITY * signU;
-  const frontLongDemand = -serviceBrake * 0.7 * signU;
-  const rearLongDemand = driveForce - serviceBrake * 0.3 * signU - engineBrake * signU - drag - rolling;
+  let frontLongDemand = -serviceBrake * 0.7 * signU;
+  let rearLongDemand = driveForce - serviceBrake * 0.3 * signU - engineBrake * signU - drag - rolling;
 
   const accelGuess = state.lastLongAccel;
   const frontLoad = clamp(MASS * GRAVITY * REAR_ARM / WHEELBASE - MASS * accelGuess * CG_HEIGHT / WHEELBASE, MASS * GRAVITY * 0.25, MASS * GRAVITY * 0.72);
   const rearLoad = MASS * GRAVITY - frontLoad;
   const lateralTransfer = clamp(Math.abs(v) * speed * 7.5, 0, MASS * GRAVITY * 0.11);
   const frontMu = 1.12 - Math.min(0.11, lateralTransfer / (MASS * GRAVITY));
-  const rearMu = (input.handbrake ? 0.64 : 1.46 + over120Stability * .12) - Math.min(0.055, lateralTransfer / (MASS * GRAVITY));
+  const rearMu = (1.36 + over120Stability * .08 - state.driftBlend * .64) - Math.min(0.055, lateralTransfer / (MASS * GRAVITY));
 
   const stableU = Math.max(4.2, Math.abs(u));
   const frontSlip = Math.atan2(v + FRONT_ARM * state.yawRate, stableU) - steerAngle;
   const rearSlip = Math.atan2(v - REAR_ARM * state.yawRate, stableU);
   const corneringScale = clamp(Math.abs(u) / 8, 0.22, 1);
   let frontLateral = -82000 * frontSlip * corneringScale;
-  let rearLateral = -(input.handbrake ? 97000 : 112000 + over120Stability * 18000) * rearSlip * corneringScale;
+  let rearLateral = -(112000 + over120Stability * 12000 - state.driftBlend * 20000) * rearSlip * corneringScale;
+  frontLongDemand = clamp(frontLongDemand, -frontMu * frontLoad, frontMu * frontLoad);
   const frontCapacity = Math.sqrt(Math.max(0, (frontMu * frontLoad) ** 2 - frontLongDemand ** 2));
   const handbrakeLong = input.handbrake ? -Math.sign(u) * Math.min(5900, rearMu * rearLoad * 0.78) : 0;
-  const rearLongTotal = rearLongDemand + handbrakeLong;
+  const rearLongTotal = clamp(rearLongDemand + handbrakeLong, -rearMu * rearLoad, rearMu * rearLoad);
   const rearCapacity = Math.sqrt(Math.max(0, (rearMu * rearLoad) ** 2 - rearLongTotal ** 2));
-  frontLateral = clamp(frontLateral, -frontCapacity, frontCapacity);
-  rearLateral = clamp(rearLateral, -rearCapacity, rearCapacity);
+  frontLateral = frontCapacity > 0 ? frontCapacity * Math.tanh(frontLateral / frontCapacity) : 0;
+  rearLateral = rearCapacity > 0 ? rearCapacity * Math.tanh(rearLateral / rearCapacity) : 0;
 
   if (Math.abs(u) < 4) {
     const lowSpeedDamping = -v * MASS * 3.5;
@@ -223,66 +237,40 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   }
 
   const totalLong = frontLongDemand + rearLongTotal;
-  const passiveHighSpeedStability = input.handbrake ? 0 : clamp((speed - 24) / 48, 0, 1);
+  const passiveHighSpeedStability = assist * clamp((speed - 24) / 48, 0, 1);
   const steeringReversal = !input.handbrake && Math.abs(state.yawRate) > .03 && Math.sign(input.steer) === -Math.sign(state.yawRate);
   if (steeringReversal && Math.abs(state.steering) > .06) {
     // Keep the front axle authoritative during a high-speed direction change.
     // The blend remains inside the front tire's friction capacity, so this is
     // still a tire-force response rather than direct lateral translation.
-    const requestedFrontForce = Math.sign(state.steering) * frontCapacity
+    const requestedFrontForce = Math.sign(input.steer) * frontCapacity
       * clamp(.2 + Math.abs(state.steering) * .58, .2, .72);
-    const counterSteerAuthority = .34 + over120Stability * .28;
+    const counterSteerAuthority = .7 + over120Stability * .25;
     frontLateral += (requestedFrontForce - frontLateral) * counterSteerAuthority;
   }
-  const bodySlipDampingScale = steeringReversal ? .46 : 1;
-  const lateralStabilityForce = -v * MASS * (
+  const bodySlipDampingScale = input.steer * v < -.05 ? 2.5 : 1;
+  const lateralStabilityForce = clamp(-v * MASS * (
     serviceBrakeStability * 1.25
-    + (passiveHighSpeedStability * .42 + over120Stability * .52) * bodySlipDampingScale
-  );
+    + (passiveHighSpeedStability * .8 + over120Stability * 1.8) * bodySlipDampingScale
+  ), -MASS * 6 * assist, MASS * 6 * assist);
   const totalLateral = frontLateral + rearLateral + lateralStabilityForce;
 
-  // Highway-speed trajectory assist. The tire model still supplies the
-  // steering/yaw response, but keyboard steering also asks for a bounded
-  // lateral road velocity. This is the same kind of stability layer used by
-  // arcade racers to prevent the rear axle's old momentum from carrying the
-  // car across another lane after the driver has reversed direction.
-  // Handbrake input removes the assist completely so deliberate drifting
-  // retains its loose rear-axle behaviour.
-  const roadYaw = roadHeading(state.z);
-  const roadRightX = Math.cos(roadYaw);
-  const roadRightZ = -Math.sin(roadYaw);
-  const roadLateralSpeed = state.vx * roadRightX + state.vz * roadRightZ;
-  const arcadeStability = input.handbrake ? 0 : clamp((speed - 34) / 30, 0, 1);
-  const immediateCommand = Math.abs(input.steer) > .05
-    ? input.steer * .7 + state.steering * .3
-    : state.steering;
-  const desiredRoadLateralSpeed = immediateCommand * (3.7 + arcadeStability * 2.35);
-  const reversingRoadDirection = arcadeStability > .25
-    && Math.abs(input.steer) > .05
-    && input.steer * roadLateralSpeed < -.2;
-  const trajectoryAccelLimit = reversingRoadDirection ? 13.25 : 7.25;
-  const trajectoryAccel = clamp(
-    (desiredRoadLateralSpeed - roadLateralSpeed) * (1.35 + arcadeStability * 2.15),
-    -trajectoryAccelLimit,
-    trajectoryAccelLimit,
-  ) * arcadeStability;
-  const ax = (sin * totalLong + rightX * totalLateral) / MASS + roadRightX * trajectoryAccel;
-  const az = (cos * totalLong + rightZ * totalLateral) / MASS + roadRightZ * trajectoryAccel;
+  // Assist acts in the vehicle frame and fades with the slide; it never requests
+  // a road/lane velocity. Countersteering still works through front tire force.
+  const ax = (sin * totalLong + rightX * totalLateral) / MASS;
+  const az = (cos * totalLong + rightZ * totalLateral) / MASS;
   state.vx += ax * dt;
   state.vz += az * dt;
 
   const yawTorque = FRONT_ARM * frontLateral - REAR_ARM * rearLateral;
-  const yawLimit = input.handbrake
-    ? 1.62 - highSpeedSteer * .42
-    : (.91 - highSpeedSteer * .71) * (1 - over120Stability * .34) * (1 - serviceBrakeStability * .34);
+  const gripYawLimit = (.91 - highSpeedSteer * .71) * (1 - over120Stability * .34) * (1 - serviceBrakeStability * .25);
+  const yawLimit = gripYawLimit + state.driftBlend * (1.35 - highSpeedSteer * .3 - gripYawLimit);
   const desiredYawRate = clamp(
-    Math.abs(u) / WHEELBASE * Math.tan(steerAngle),
+    Math.abs(u) / WHEELBASE * Math.tan(steeringInputReversal ? input.steer * maxSteer : steerAngle),
     -yawLimit,
     yawLimit,
   );
-  const yawControlGain = input.handbrake
-    ? 0
-    : 3900 + highSpeedSteer * 3300 + over120Stability * 4600 + serviceBrakeStability * 9800 + (steeringReversal ? 6200 : 0);
+  const yawControlGain = assist * (3900 + highSpeedSteer * 3300 + over120Stability * 4600 + serviceBrakeStability * 9800 + (steeringReversal || steeringInputReversal ? 52000 : 0));
   const yawControlTorque = (desiredYawRate - state.yawRate) * yawControlGain;
   const yawDamping = state.yawRate * (
     1950 + speed * 48 + over120Stability * 3600 + (steeringReversal ? 2400 : 0) + serviceBrakeStability * (3000 + speed * 38)
@@ -298,31 +286,21 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   const lateralOffset = state.x - center;
   if (Math.abs(lateralOffset) > VEHICLE_ROAD_EDGE) {
     const side = Math.sign(lateralOffset);
-    barrierImpact = Math.abs(v) * 7 + Math.max(0, speed - 24) * 0.32;
+    barrierImpact = Math.max(0, (state.vx * Math.cos(roadHeading(state.z)) - state.vz * Math.sin(roadHeading(state.z))) * side);
     state.x = center + side * VEHICLE_ROAD_EDGE;
     const roadYaw = roadHeading(state.z);
     const nx = Math.cos(roadYaw) * side;
     const nz = -Math.sin(roadYaw) * side;
     const vn = state.vx * nx + state.vz * nz;
     if (vn > 0) {
-      state.vx -= nx * vn * 1.42;
-      state.vz -= nz * vn * 1.42;
-      state.yawRate -= side * Math.min(1.4, vn * 0.075);
+      state.vx -= nx * vn * 1.08;
+      state.vz -= nz * vn * 1.08;
+      state.yawRate -= side * Math.min(.45, vn * .015);
     }
   }
 
-  const nextSin = Math.sin(state.yaw);
-  const nextCos = Math.cos(state.yaw);
-  const nextRightX = nextCos;
-  const nextRightZ = -nextSin;
-  const nextU = state.vx * nextSin + state.vz * nextCos;
-  const nextV = state.vx * nextRightX + state.vz * nextRightZ;
   state.lastLongAccel = totalLong / MASS;
-  state.speedMps = Math.hypot(state.vx, state.vz);
-  state.speedMph = state.speedMps * 2.236936;
-  state.longitudinalSpeed = nextU;
-  state.lateralSpeed = nextV;
-  state.rpm = clamp(Math.abs(nextU) / WHEEL_RADIUS * GEARS[state.gear] * FINAL_DRIVE * 60 / (2 * Math.PI), 900, 7800);
+  refreshVehicleTelemetry(state);
   state.steerAngle = steerAngle;
   state.frontSlip = frontSlip;
   state.rearSlip = rearSlip;
@@ -332,4 +310,14 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   state.forceLongitudinal = totalLong;
   state.forceLateral = totalLateral;
   return { barrierImpact };
+}
+
+/** Refresh derived values after impulses as well as the regular integration step. */
+export function refreshVehicleTelemetry(state: VehicleState): void {
+  const sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
+  state.longitudinalSpeed = state.vx * sin + state.vz * cos;
+  state.lateralSpeed = state.vx * cos - state.vz * sin;
+  state.speedMps = Math.hypot(state.vx, state.vz);
+  state.speedMph = state.speedMps * 2.236936;
+  state.rpm = clamp(Math.abs(state.longitudinalSpeed) / WHEEL_RADIUS * GEARS[state.gear] * FINAL_DRIVE * 60 / (2 * Math.PI), 900, 7800);
 }

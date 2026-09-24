@@ -1,5 +1,7 @@
 # MIDNIGHT LOOP Acceptance Audit
 
+> **Historical audit:** The table below describes earlier builds. For Tuner Series 02, use [REVIEW.md](REVIEW.md). Current automated evidence passes, but fresh visual/browser and physical-phone validation are pending; older “Proven” labels must not be applied to the new UI.
+
 Status meaning: **Proven** has current automated, implementation, or desktop-Chrome evidence.
 
 | # | Requirement | Status | Evidence |

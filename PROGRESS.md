@@ -503,3 +503,13 @@
 - Selected the CC0 version by 15HPanska_Ruttner_Jan so the public build can redistribute and adapt it without proprietary licensing.
 - Added stereo side placement, a restrained Doppler playback-rate fall, distance-friendly filtering, and a natural two-second envelope while preserving the existing occasional-horn cooldown.
 - Added hosted-subpath regression coverage for the horn asset URL and documented the source/license in README.
+
+
+## 2026-09-24 — Tuner Series 02
+
+- Fixed the actual Kitsune GLB rig with four logical wheel assemblies, shared rim/tire centers, isolated spin/steering pivots, and independent body lean. Original Asterion wheels use the same animation contract.
+- Added bounded combined tire forces, smooth drift-grip recovery, responsive throttle and automatic kickdown, and removed road-velocity steering assistance while retaining the fast-reversal acceptance checks.
+- Unified oriented/swept contacts with deterministic impulses and forgiving relative-speed severity. Contact separation and score invalidation remain active during sound/penalty cooldowns.
+- Restored full clean-exit drift banking, removed live score additions and the extra finish bonus, added a category ledger, consistent multiplier snapshots, draft expiry, verified needle windows, and separate legacy/Series 02 records.
+- Replaced legacy shell theme layers with shared charcoal/ivory/acid-green styling. Added calibrated SVG gauges, pending drift feedback, queued award callouts, score breakdown, loading stages, recoverable imported-model error messaging, and reduced-motion styling.
+- 99 automated tests pass, including actual GLB hub invariance and 60/100/140 MPH physical scenarios. TypeScript passes. Browser automation initialization is unavailable, so fresh screenshots and physical-phone validation are explicitly pending in REVIEW.md. No deployment was performed.

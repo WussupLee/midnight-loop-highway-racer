@@ -13,18 +13,18 @@
       <div id="loading" class="loading-screen">
         <div class="loader-mark">ML</div>
         <div class="loader-line"><i></i></div>
-        <p>LOADING INTERSTATE LOOP</p>
+        <p id="loading-stage" role="status">CONNECTING TO THE INTERSTATE</p>
       </div>
 
       <main id="menu" class="screen menu-screen hidden" aria-labelledby="game-title">
         <div class="menu-grain"></div>
-        <div class="menu-boot" aria-hidden="true"><span>ML NETWORK</span><b>INTERSTATE SYSTEM // USER 01</b><i>● ONLINE</i></div>
-        <div class="network-cubes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="menu-boot" aria-hidden="true"><span>ML / AFTER HOURS</span><b>INTERSTATE 45 — STREET DIVISION</b><i>● READY</i></div>
+        <div class="tuner-stripes" aria-hidden="true"></div>
         <section class="title-lockup">
           <div class="eyebrow">INTERSTATE 45 // 02:13 AM</div>
           <h1 id="game-title">MIDNIGHT <span>LOOP</span></h1>
           <p class="tagline">FIND THE LINE. MAKE IT HOME.</p>
-          <div class="route-data" aria-hidden="true"><span>ROUTE ID</span><b>SUBJECT A-45</b><span>ACCESS</span><b>OPEN LOOP</b><span>STATUS</span><b>UNSTABLE</b></div>
+          <div class="route-data" aria-hidden="true"><span>ROUTE ID</span><b>I-45 / SOUTHBOUND</b><span>ACCESS</span><b>OPEN LOOP</b><span>STATUS</span><b>AFTER HOURS</b></div>
         </section>
         <section class="car-showcase" aria-label="Selected car showroom">
           <div id="car-drag-surface" class="car-drag-surface" role="img" aria-label="ASTERION VX-R rotating 360 degree preview"></div>
@@ -41,8 +41,10 @@
           <p class="spin-hint">DRAG / SWIPE TO ROTATE · AUTO 360°</p>
         </section>
         <section class="menu-panel glass-panel">
-          <header><span>RUN SELECT</span><b>01 / 01</b><i>▣</i></header>
-          <div class="menu-stat"><span>LOCAL RECORD</span><strong id="menu-high-score">000 000</strong></div>
+          <header><span>DRIVER SETUP</span><b>01 / 01</b><i>▣</i></header>
+          <div class="menu-stat"><span>RECORD / SERIES 02</span><strong id="menu-high-score">000 000</strong></div>
+          <p id="legacy-record" class="legacy-record"></p>
+          <p id="asset-status" class="asset-status" role="status"></p>
           <label>Engine sound
             <select id="engine-sound">
               <option value="street-sedan" selected>Street Sedan</option>
@@ -79,37 +81,24 @@
           </details>
         </section>
         <button id="start-button" class="menu-start-button" type="button"><span>START RUN</span><b>ENTER &gt;</b></button>
-        <footer>ORIGINAL PROTOTYPE // FICTIONAL VEHICLES AND CITY // v1.3</footer>
+        <footer>ORIGINAL PROTOTYPE // FICTIONAL VEHICLES AND CITY // v2.0 / TUNER SERIES</footer>
       </main>
 
-      <section id="hud" class="hud hidden" aria-live="polite">
+      <section id="hud" class="hud hidden" >
         <div class="hud-top-left">
           <div class="label">RUN SCORE</div>
           <div id="score" class="score">000 000</div>
           <div class="record-line">BEST <span id="high-score">000 000</span></div>
         </div>
         <div class="hud-top-center">
+          <div id="drift-pending" class="drift-pending"></div>
           <div id="callout" class="callout"></div>
-          <div id="combo-wrap" class="combo-wrap"><span>RISK CHAIN</span><b id="combo">&times;1.00</b><i id="combo-timer"></i></div>
+          <div id="combo-wrap" class="combo-wrap"><span>CHAIN</span><b id="combo">&times;1.00</b><small id="speed-risk">SPEED ×1.00</small><i id="combo-timer"></i></div>
         </div>
         <div class="hud-bottom-right">
           <div class="gauge-cluster">
-          <div class="tach gauge gauge-rpm">
-            <div class="tach-arcs"></div>
-            <div class="tach-numerals" aria-hidden="true"><i class="n0">0</i><i class="n1">1</i><i class="n2">2</i><i class="n3">3</i><i class="n4">4</i><i class="n5">5</i><i class="n6">6</i><i class="n7">7</i><i class="n8">8</i></div>
-            <div id="tach-needle" class="tach-needle"></div>
-            <div class="needle-hub"></div>
-            <div class="rpm-label">RPM &times;1000</div>
-            <div class="rpm-window"><b id="rpm-value">4300</b><span>RPM</span></div>
-            <div class="gear-window"><small>GEAR</small><b id="gear">3</b></div>
-          </div>
-          <div class="speed-gauge gauge">
-            <div class="speed-ticks"></div>
-            <div class="speed-numerals" aria-hidden="true"><i class="s0">0</i><i class="s1">40</i><i class="s2">80</i><i class="s3">120</i><i class="s4">160</i><i class="s5">200</i></div>
-            <div id="speed-needle" class="speed-needle"></div>
-            <div class="speed-hub"></div>
-            <div class="speed-block"><b id="speed">080</b><span>MPH</span></div>
-          </div>
+          <div class="gauge gauge-rpm"><div id="rpm-face"></div><div class="rpm-window"><b id="rpm-value">4300</b><span>RPM</span></div></div>
+          <div class="gauge speed-gauge"><div id="speed-face"></div><div class="speed-block"><b id="speed">080</b><span>MPH</span></div><div class="gear-window"><small>GEAR</small><b id="gear">3</b></div></div>
           <div class="boost-shell"><label>BOOST</label><div><i id="boost-fill"></i></div></div>
           </div>
         </div>
@@ -180,6 +169,7 @@
             <div><span>TOP SPEED</span><b id="final-speed">0 MPH</b></div>
             <div><span>NEAR MISSES</span><b id="final-misses">0</b></div>
           </div>
+          <p id="score-breakdown" class="score-breakdown"></p>
           <button id="restart-button" class="primary-button">RUN IT BACK <b>R</b></button>
           <button id="gameover-quit-button" class="ghost-button">TITLE SCREEN</button>
         </div>

@@ -7,10 +7,12 @@ export interface DriftInput {
   now: number;
   dt: number;
   multiplier: number;
+  invalidated?: boolean;
 }
 
 export interface DriftState {
   active: boolean;
+  recoveryTime: number;
   startedAt: number;
   duration: number;
   angleDeg: number;
@@ -33,12 +35,14 @@ export function bankDriftScore(currentScore: number, completedPoints: number): {
 }
 
 export function createDriftState(): DriftState {
-  return { active: false, startedAt: 0, duration: 0, angleDeg: 0, radiusM: Number.POSITIVE_INFINITY, points: 0, pendingPoints: 0, direction: 'LEFT' };
+  return { recoveryTime: 0, active: false, startedAt: 0, duration: 0, angleDeg: 0, radiusM: Number.POSITIVE_INFINITY, points: 0, pendingPoints: 0, direction: 'LEFT' };
 }
 
 export function updateDrift(previous: DriftState, input: DriftInput): DriftUpdate {
   const angleDeg = Math.atan2(Math.abs(input.lateralSpeed), Math.max(2, Math.abs(input.longitudinalSpeed))) * 180 / Math.PI;
   const radiusM = Math.abs(input.yawRate) > .025 ? input.speedMps / Math.abs(input.yawRate) : Number.POSITIVE_INFINITY;
+  const empty = (): DriftUpdate => ({ state: createDriftState(), scoreDelta: 0, completedPoints: 0, started: false });
+  if (input.invalidated || input.longitudinalSpeed <= 0 || angleDeg > 58 || input.speedMps < 10) return empty();
   const initiating = input.handbrake
     && input.speedMps >= 16
     && angleDeg >= 3.5
@@ -47,7 +51,6 @@ export function updateDrift(previous: DriftState, input: DriftInput): DriftUpdat
     && radiusM >= 4
     && radiusM <= 380;
   const sustaining = previous.active
-    && input.handbrake
     && input.speedMps >= 14
     && angleDeg >= 2
     && angleDeg <= 58
@@ -57,15 +60,16 @@ export function updateDrift(previous: DriftState, input: DriftInput): DriftUpdat
   const valid = initiating || sustaining;
 
   if (!valid) {
-    const completedPoints = previous.active && previous.duration >= .5 && previous.points >= 90
-      ? Math.round(previous.points * .4 / 5) * 5
-      : 0;
-    return { state: createDriftState(), scoreDelta: 0, completedPoints, started: false };
+    if (!previous.active) return empty();
+    const state = { ...previous, recoveryTime: previous.recoveryTime + input.dt, angleDeg, radiusM };
+    if (state.recoveryTime < .35) return { state, scoreDelta: 0, completedPoints: 0, started: false };
+    return { ...empty(), completedPoints: previous.duration >= .5 ? Math.round(previous.points + previous.pendingPoints) : 0 };
   }
 
   const started = !previous.active;
   const state = previous.active ? { ...previous } : { ...createDriftState(), active: true, startedAt: input.now };
   state.active = true;
+  state.recoveryTime = 0;
   state.duration += input.dt;
   state.angleDeg = angleDeg;
   state.radiusM = radiusM;
@@ -77,12 +81,12 @@ export function updateDrift(previous: DriftState, input: DriftInput): DriftUpdat
   if (state.duration >= .055) {
     const angleFactor = Math.min(2.1, Math.max(.08, (angleDeg - 2.5) / 18));
     const speedFactor = Math.min(1.75, Math.max(.55, input.speedMps / 42));
-    state.pendingPoints += (42 + 115 * angleFactor) * speedFactor * Math.max(1, input.multiplier * .5) * input.dt;
+    state.pendingPoints += (42 + 115 * angleFactor) * speedFactor * Math.max(1, input.multiplier) * input.dt;
   }
   const scoreDelta = Math.floor(state.pendingPoints);
   if (scoreDelta > 0) {
     state.pendingPoints -= scoreDelta;
     state.points += scoreDelta;
   }
-  return { state, scoreDelta, completedPoints: 0, started };
+  return { state, scoreDelta: 0, completedPoints: 0, started };
 }

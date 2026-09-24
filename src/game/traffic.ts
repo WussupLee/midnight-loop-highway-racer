@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { carContact } from './contact';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { LANE_COUNT, LANE_OFFSETS, clamp, laneX, roadCenterY, roadHeading, seeded } from './world';
 import { createLoftGeometry, createRoundLamp, createTailLightGlowTexture } from './vehicleMeshes';
@@ -26,6 +27,8 @@ export interface TrafficVehicle {
   laneChangeDuration: number;
   z: number;
   speed: number;
+  vx: number;
+  vz: number;
   desiredSpeed: number;
   halfWidth: number;
   halfLength: number;
@@ -49,36 +52,11 @@ export interface TrafficCollision {
   normalX: number;
   normalZ: number;
   scrape: boolean;
+  closingSpeed?: number;
+  lever?: number;
+  notify?: boolean;
   correctionX?: number;
   correctionZ?: number;
-}
-
-export interface TrafficImpactSample {
-  overlapX: number;
-  overlapZ: number;
-  relativeForwardSpeed: number;
-  relativeLateralSpeed: number;
-}
-
-export function classifyTrafficImpact(sample: TrafficImpactSample): { scrape: boolean; severity: number } {
-  const penetrationX = Math.max(0, sample.overlapX);
-  const penetrationZ = Math.max(0, sample.overlapZ);
-  const scrape = penetrationX <= penetrationZ;
-  if (scrape) {
-    return {
-      scrape: true,
-      severity: 3.5
-        + Math.abs(sample.relativeLateralSpeed) * 2.2
-        + Math.abs(sample.relativeForwardSpeed) * .105
-        + penetrationX * 6,
-    };
-  }
-  return {
-    scrape: false,
-    severity: 6
-      + Math.abs(sample.relativeForwardSpeed) * 1.4
-      + penetrationZ * 10,
-  };
 }
 
 export function projectedCollisionFootprint(halfWidth: number, halfLength: number, yawDelta: number): { halfWidth: number; halfLength: number } {
@@ -404,7 +382,7 @@ export class TrafficManager {
         body,
       );
       this.vehicles.push({
-        id: i, generation: 0, group: model.group, body, collider, archetype,
+        id: i, generation: 0, vx: 0, vz: 0, group: model.group, body, collider, archetype,
         lane: i % LANE_COUNT, targetLane: i % LANE_COUNT, lanePosition: i % LANE_COUNT,
         pendingLane: i % LANE_COUNT, signalDirection: 0, signalTime: 0,
         laneChangeActive: false, laneChangeFrom: i % LANE_COUNT, laneChangeProgress: 0, laneChangeDuration: 2.3,
@@ -540,6 +518,7 @@ export class TrafficManager {
       }
       if (vehicle.z < playerZ - 150) this.spawn(vehicle, playerZ + 390 + this.random() * 360, Math.floor(this.random() * LANE_COUNT));
 
+      const previousTrafficX = vehicle.group.position.x, previousTrafficZ = vehicle.z;
       vehicle.collisionCooldown = Math.max(0, vehicle.collisionCooldown - dt);
       vehicle.reaction -= dt;
       const front = this.closestInLane(vehicle, vehicle.targetLane, true);
@@ -610,6 +589,8 @@ export class TrafficManager {
       }
       for (const wheel of vehicle.wheelMeshes) wheel.rotation.x -= vehicle.speed * dt / .31;
       this.syncTransform(vehicle);
+      vehicle.vx = (vehicle.group.position.x - previousTrafficX) / dt;
+      vehicle.vz = (vehicle.z - previousTrafficZ) / dt;
       const playerForwardX = Math.sin(playerYaw);
       const playerForwardZ = Math.cos(playerYaw);
       const playerRightX = Math.cos(playerYaw);
@@ -634,51 +615,23 @@ export class TrafficManager {
       vehicle.passedPlayer = vehicle.lastPlayerDz > 0 && playerDz <= 0;
       vehicle.lastPlayerDz = playerDz;
 
-      const contactYaw = roadHeading((playerZ + vehicle.z) * .5);
-      const rightX = Math.cos(contactYaw);
-      const rightZ = -Math.sin(contactYaw);
-      const forwardX = Math.sin(contactYaw);
-      const forwardZ = Math.cos(contactYaw);
-      const worldDx = playerX - vehicle.group.position.x;
-      const worldDz = playerZ - vehicle.z;
-      const lateralDelta = worldDx * rightX + worldDz * rightZ;
-      const longitudinalDelta = worldDx * forwardX + worldDz * forwardZ;
-      const playerFootprint = projectedCollisionFootprint(playerHalfWidth, playerHalfLength, playerYaw - contactYaw);
-      const trafficFootprint = projectedCollisionFootprint(
-        vehicle.collisionHalfWidth,
-        vehicle.collisionHalfLength,
-        vehicle.group.rotation.y - contactYaw,
+      const contact = carContact(
+        { x: playerX, z: playerZ, yaw: playerYaw, vx: playerVx, vz: playerVz, halfWidth: playerHalfWidth, halfLength: playerHalfLength },
+        { x: vehicle.group.position.x, z: vehicle.z, yaw: vehicle.group.rotation.y, vx: vehicle.vx, vz: vehicle.vz, halfWidth: vehicle.collisionHalfWidth, halfLength: vehicle.collisionHalfLength }, dt,
       );
-      const overlapX = playerFootprint.halfWidth + trafficFootprint.halfWidth - Math.abs(lateralDelta);
-      const overlapZ = playerFootprint.halfLength + trafficFootprint.halfLength - Math.abs(longitudinalDelta);
-      if (overlapX > 0 && overlapZ > 0 && vehicle.collisionCooldown <= 0) {
-        const relativeForward = Math.hypot(playerVx, playerVz) - vehicle.speed;
-        const playerLateral = playerVx * Math.cos(roadHeading(playerZ)) - playerVz * Math.sin(roadHeading(playerZ));
-        const laneRate = vehicle.laneChangeActive
-          ? (vehicle.targetLane - vehicle.laneChangeFrom) * smoothLaneChangeRate(vehicle.laneChangeProgress) / vehicle.laneChangeDuration
-          : 0;
-        const trafficLateral = laneRate * (LANE_OFFSETS[1] - LANE_OFFSETS[0]);
-        const impact = classifyTrafficImpact({
-          overlapX,
-          overlapZ,
-          relativeForwardSpeed: relativeForward,
-          relativeLateralSpeed: playerLateral - trafficLateral,
-        });
-        const lateralSide = Math.sign(lateralDelta || (this.random() - .5));
-        const longitudinalSide = Math.sign(longitudinalDelta || 1);
-        // `normal` points from the player into the contacted vehicle, matching
-        // applyCollisionImpulse's subtraction convention. Correction moves in
-        // the exact opposite direction to prevent visible clipping.
-        const normalX = impact.scrape ? -rightX * lateralSide : -forwardX * longitudinalSide;
-        const normalZ = impact.scrape ? -rightZ * lateralSide : -forwardZ * longitudinalSide;
-        const penetration = (impact.scrape ? overlapX : overlapZ) + .035;
-        vehicle.collisionCooldown = .7;
+      if (contact) {
+        const notify = vehicle.collisionCooldown <= 0;
+        if (notify) vehicle.collisionCooldown = .7;
         collisions.push({
-          vehicle, severity: impact.severity, normalX, normalZ, scrape: impact.scrape,
-          correctionX: -normalX * penetration,
-          correctionZ: -normalZ * penetration,
+          vehicle, severity: contact.closingSpeed, closingSpeed: contact.closingSpeed,
+          normalX: contact.normalX, normalZ: contact.normalZ, scrape: contact.scrape,
+          lever: contact.lever, notify,
+          correctionX: -contact.normalX * contact.penetration,
+          correctionZ: -contact.normalZ * contact.penetration,
         });
+        if (notify && !contact.scrape) vehicle.speed = Math.max(10, vehicle.speed + contact.closingSpeed * .12);
       }
+
     }
     this.updateHeadlights(playerZ);
     return collisions;

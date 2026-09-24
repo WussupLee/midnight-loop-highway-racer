@@ -32,6 +32,7 @@ interface Candidate {
   peakRelativeSpeed: number;
   side: 'left' | 'right';
   overlapAt: number;
+  overlapEndAt: number;
 }
 
 export interface NearMissEvent {
@@ -44,12 +45,17 @@ export interface NearMissEvent {
   overlapAt: number;
   perfect: boolean;
   points: number;
+  overlapEndAt?: number;
+  appliedMultiplier?: number;
 }
 
 export function isThreadNeedlePair(first: NearMissEvent, second: NearMissEvent): boolean {
   return first.id !== second.id
     && first.side !== second.side
-    && Math.abs(first.overlapAt - second.overlapAt) <= .65;
+    && first.clearance >= .06 && second.clearance >= .06
+    && first.clearance + second.clearance <= 1.8
+    && first.overlapEndAt !== undefined && second.overlapEndAt !== undefined
+    && Math.max(first.overlapAt, second.overlapAt) <= Math.min(first.overlapEndAt, second.overlapEndAt);
 }
 
 export interface ComboState {
@@ -162,6 +168,7 @@ export class NearMissTracker {
         peakRelativeSpeed: relativeSpeed,
         side: sample.playerX < sample.trafficX ? 'left' : 'right',
         overlapAt: Number.POSITIVE_INFINITY,
+        overlapEndAt: Number.NEGATIVE_INFINITY,
       };
       this.candidates.set(sample.id, candidate);
     }
@@ -170,11 +177,14 @@ export class NearMissTracker {
     candidate.collided ||= sample.collided || clearance < -0.04;
     candidate.peakPlayerSpeed = Math.max(candidate.peakPlayerSpeed, sample.playerSpeed);
     candidate.peakRelativeSpeed = Math.max(candidate.peakRelativeSpeed, relativeSpeed);
-    candidate.side = sample.playerX < sample.trafficX ? 'left' : 'right';
+    const side = sample.playerX < sample.trafficX ? 'left' : 'right';
+    if (!candidate.overlapped) candidate.side = side;
+    else if (candidate.side !== side && Math.abs(dz) <= combinedLength) candidate.collided = true;
 
     if (Math.abs(dz) <= combinedLength + 0.25) {
       candidate.overlapped = true;
       candidate.overlapAt = Math.min(candidate.overlapAt, sample.now);
+      candidate.overlapEndAt = sample.now;
       if (clearance >= 0) candidate.minClearance = Math.min(candidate.minClearance, clearance);
     }
 
@@ -198,6 +208,8 @@ export class NearMissTracker {
         relativeSpeed: candidate.peakRelativeSpeed,
         side: candidate.side,
         overlapAt: candidate.overlapAt,
+        overlapEndAt: candidate.overlapEndAt,
+        appliedMultiplier: multiplier,
         perfect: candidate.minClearance <= PASS_CONFIG.perfectClearance && candidate.peakRelativeSpeed > 12,
         points: calculateNearMissScore(candidate.minClearance, candidate.peakPlayerSpeed, candidate.peakRelativeSpeed, multiplier),
       };

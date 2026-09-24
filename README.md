@@ -27,6 +27,10 @@ npm run build
 npm run preview
 ```
 
+## Tuner Series 02
+
+The local revision fixes wheel hubs, introduces progressive drift recovery and forgiving contacts, banks drift points on clean exits, and replaces the shell and gauges with a consistent tuner instrument theme. See [REVIEW.md](REVIEW.md) for research, scoring rules, implementation evidence, and the remaining browser/phone validation gates. The public play link above tracks successful deployments from the main branch.
+
 ## Controls
 
 | Control | Action |
@@ -48,15 +52,19 @@ Phones and touch-capable tablets automatically receive a close portrait cockpit 
 
 The Driver Controls menu also offers Tilt Steering. This mode auto-accelerates, maps calibrated phone roll to smoothed steering with a center dead zone, and replaces the pedal layout with three large bottom actions: N2O at left, handbrake at center, and service brake at right. `CAL` recenters the current phone angle. iPhone/iPad may display the standard motion-access prompt when Tilt Steering is selected; denied or unavailable motion access returns the game to Thumb Controls.
 
-Steering is speed-sensitive and smoothed for keyboard play. Normal high-speed steering uses a front-axle-led, tightly controlled yaw envelope with additional rear stabilization during rapid left-right transitions; its tuned lateral response is quick enough for dense-traffic lane changes. Service braking adds straight-line lateral and yaw stabilization; it does not release rear grip. The handbrake is deliberately separate: it releases rear grip quickly, opens the wider drift envelope, and enables drift scoring. A stronger mid-speed torque recovery makes brake-and-pass moves responsive while preserving the simulated gearbox and tire-force limits.
+Steering is speed-sensitive and smoothed for keyboard play. Combined axle grip limits and progressive tire saturation supply the base response; bounded body-slip and yaw assistance keep fast countersteering manageable. No road-velocity target moves the car between lanes. Grip assistance fades continuously into a deliberate handbrake slide and returns progressively during recovery. Service braking remains distinct from handbraking. Throttle demand can kick down the automatic gearbox for a stronger passing response.
 
-Traffic collision shells sit slightly inside the visible body panels. A shallow door-to-door overlap is treated as a scrape: it produces sound, a small lateral nudge, mild combo damage, and no artificial spin. Front/rear impacts and hard lateral strikes still use the full crash response. This lets visually plausible gaps remain playable without making direct collisions harmless.
+Traffic uses slightly inset oriented collision shells. Side scrapes nudge the player and reduce the combo; moderate impacts slow and deflect the car without ending the run. Extreme impacts at 30 m/s normal closing speed end the run. Contact correction continues during effect cooldowns, and the manual and Rapier contact paths share one response calculation.
 
 ## How to score
 
 Pass traffic with genuine side clearance while moving substantially faster. A score is awarded only after approach, overlap, and clean separation; sitting beside a vehicle earns nothing. Score scales with clearance, speed, closing speed, and the active risk-chain multiplier. Each traffic spawn can award only once, preventing repeated farming.
 
-Near misses inside 4.25 seconds build the chain up to ×8. The recognition envelope is forgiving enough for keyboard lane changes, while the nonlinear score still strongly favors genuinely close passes. Very close fast passes become Perfect Passes. Crossing a narrow gap between two cars triggers Thread the Needle. Drafting before a pass adds a release bonus. Sustained handbrake slides accumulate an unbanked drift session after the car reaches a genuine slip angle, yaw rate, speed, and curved radius; a straight brake lockup or backwards spin does not qualify. When a valid drift ends, its complete award is added once to the overall run score and a top-center popup shows both `DRIFT +points` and the updated total. Risk refills boost, which creates the loop: risk → speed → greater risk.
+Near misses inside 4.25 seconds build the chain up to ×8. Tight, fast passes receive higher scores. Needle bonuses require two opposite-side passes with overlapping intervals and a genuinely narrow gap. Draft eligibility expires three seconds after losing the drafting position. Chain and speed multipliers are displayed separately; a pass and its associated bonuses use the same pre-award multiplier.
+
+A handbrake initiates a drift, but a qualifying slide can continue under throttle and countersteer after release. Points remain unbanked until 0.35 seconds of clean recovery after at least 0.5 seconds of qualifying drift. The full award is then added exactly once. Contact, a spin, reverse, recovery, or quitting discards the pending drift. The results breakdown reconciles with the total score. Passive high-speed points use chain only; drift/pass rewards also use the displayed speed multiplier.
+
+Series 02 records are separate from old scores, which remain stored and appear as a labeled legacy record. Both selectable cars retain the same gameplay mechanics.
 
 ## Architecture
 
@@ -69,6 +77,10 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 - `src/game/world.ts` - restart-safe recycled curved five-lane freeway, shoulders, Jersey barriers, constructed tunnels with segmented concrete walls, vents and utility conduits, overpasses, original green signage, warm lighting, and skyline.
 - `src/game/traffic.ts` — bounded 56-vehicle pool, a low-profile traffic mix (compact, coupe, SUV, and pickup, plus rare large trucks), gap-preserving three-car opening waves, safe lane changes, hybrid traffic headlights, and collisions.
 - `src/game/vehicleMeshes.ts` — shared PS2-era faceted loft geometry, low-cost round lamps, and soft additive glow texture generation for underglow and night-visible brake-light halos.
+- `src/game/wheelRig.ts` — centered wheel assemblies, authored geometry splitting, and body isolation.
+- `src/game/contact.ts` — shared oriented and swept vehicle contact geometry.
+- `src/game/scoreLedger.ts` — deduplicated awards and reconciled category totals.
+- `src/game/instruments.ts` — shared SVG dial calibration and refresh-independent needle damping.
 - `src/game/visuals.ts` — the original silver Asterion tuner coupe plus the imported-and-restyled gunmetal Kitsune sports car, independently animated wheels, model-aligned head/brake lights, underglow, chase/hood cameras, and speed effects.
 - `src/game/audio.ts` — procedural engine, throttle, overrun, road, braking, tires, boost, wind, stereo traffic passes, impacts, crash layers, UI, and background-track playback.
 
@@ -76,7 +88,7 @@ Near misses inside 4.25 seconds build the chain up to ×8. The recognition envel
 
 The game includes the user-supplied recording `FREE PLAYBOI CARTI x PIERRE BOURNE x TLOP5 TYPE BEAT YUGIOH w. NEONN.mp3`, stored locally as `public/audio/midnight-loop-background.mp3`. It starts after **Start Run** (to satisfy browser autoplay rules), pauses with the game, obeys the **M** master mute control, and rewinds when returning to the title screen. No license file accompanied the recording; anyone distributing or publishing this build must independently confirm they have the necessary rights to use it.
 
-Three.js renders with ACES tone mapping, fog, dark wet materials, darkness-led exposure, warm practical lamps, reflective markings, muddy optical bloom, dense rectangular facade lights, and restrained green/violet instrumentation. A procedural moon sits above the skyline with layered wispy clouds, cool bloom, and restrained directional moonlight. The camera shader uses clipped MiniDV night response, softened and quantized chroma, animated sensor noise, speed persistence, diffraction, RGB misregistration, and heavy ordered dithering. Fisheye/barrel distortion, VHS scanlines, rolling tracking bands, and the VHS color filter are not applied. A static pointer-transparent ordered-dither layer remains above the complete application, including HUD, menus, loading, crash presentation, and touch controls. The player uses only a true wide-angle spotlight; the former additive projection plane was removed so no headlight polygon can appear during the intro or a drift. The hood camera looks across an actual crowned hood surface and receives the same high-speed vibration language as chase view. Every active traffic car has emissive lamps, additive brake-light halos, and a low-cost projected road beam; the six nearest relevant cars additionally receive true dynamic spotlights. Rapier supplies contact pairs while the custom force model owns player dynamics. Rendering interpolates the 120 Hz physics poses so camera and car motion remain smooth between simulation ticks.
+Three.js renders with ACES tone mapping, fog, dark wet materials, darkness-led exposure, warm practical lamps, reflective markings, muddy optical bloom, dense rectangular facade lights, and restrained ivory instruments with amber needles and acid-green interface accents. A procedural moon sits above the skyline with layered wispy clouds, cool bloom, and restrained directional moonlight. The camera shader uses clipped MiniDV night response, softened and quantized chroma, animated sensor noise, speed persistence, diffraction, RGB misregistration, and heavy ordered dithering. Fisheye/barrel distortion, VHS scanlines, rolling tracking bands, and the VHS color filter are not applied. A static pointer-transparent ordered-dither layer remains above the complete application, including HUD, menus, loading, crash presentation, and touch controls. The player uses only a true wide-angle spotlight; the former additive projection plane was removed so no headlight polygon can appear during the intro or a drift. The hood camera looks across an actual crowned hood surface and receives the same high-speed vibration language as chase view. Every active traffic car has emissive lamps, additive brake-light halos, and a low-cost projected road beam; the six nearest relevant cars additionally receive true dynamic spotlights. Rapier supplies contact pairs while the custom force model owns player dynamics. Rendering interpolates the 120 Hz physics poses so camera and car motion remain smooth between simulation ticks.
 
 Procedural audio includes drivetrain, tire, road, boost, collision, and speed-dependent atmosphere. Every completed traffic pass produces a spatial Doppler-style body-and-air whoosh, with close fast passes becoming substantially stronger and the near-miss/perfect-pass sting layering over the same moment. Traffic can occasionally answer with a spatially positioned recorded horn. Music is intentionally bass-reduced below 95 mph; crossing 95 mph smoothly restores its low end while the speed-dependent wind continues to rise.
 
@@ -88,7 +100,7 @@ The KITSUNE R-SPEC uses Quaternius's complete [Sports Car model](https://poly.pi
 
 ## Physics approach
 
-The 1,360 kg coupe evolves through longitudinal/lateral velocity, yaw rate, and forces—never lane interpolation. The model calculates speed-sensitive steering, front/rear slip angle, axle loads, lateral transfer, saturated cornering force, friction-circle coupling, engine braking, rolling resistance, and aerodynamic drag. Above highway speed, a bounded road-frame stability force helps keyboard reversals settle promptly instead of letting old rear-axle momentum carry the car across an extra lane; the handbrake disables this assistance for real slides. A six-speed automatic derives RPM from wheel speed, gear ratio, and final drive, then applies an interpolated torque curve.
+The 1,360 kg coupe evolves through longitudinal/lateral velocity, yaw rate, and forces—never lane interpolation. The model calculates speed-sensitive steering, front/rear slip angle, axle loads, lateral transfer, saturated cornering force, friction-circle coupling, engine braking, rolling resistance, and aerodynamic drag. At highway speed, bounded body-slip damping and yaw assistance help reversals settle without prescribing road-frame velocity. Assistance blends out as the car enters a slide. A six-speed automatic derives RPM from wheel speed, gear ratio, and final drive, then applies an interpolated torque curve.
 
 ## Browser debug panel
 

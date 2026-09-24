@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PLAYER_HEADLIGHT_REFLECTION_START, TRAFFIC_HEADLIGHT_POOL_LENGTH, TRAFFIC_HEADLIGHT_POOL_WIDTH, TRAFFIC_SIGNAL_LEAD_TIME, TRAFFIC_SPAWN_ARCHETYPES, classifyTrafficImpact, initialTrafficPlacement, maximumOccupiedLanesInBand, playerHeadlightReflectionStrength, projectedCollisionFootprint, smoothLaneChange, smoothLaneChangeRate } from '../src/game/traffic';
+import { PLAYER_HEADLIGHT_REFLECTION_START, TRAFFIC_HEADLIGHT_POOL_LENGTH, TRAFFIC_HEADLIGHT_POOL_WIDTH, TRAFFIC_SIGNAL_LEAD_TIME, TRAFFIC_SPAWN_ARCHETYPES, initialTrafficPlacement, maximumOccupiedLanesInBand, playerHeadlightReflectionStrength, projectedCollisionFootprint, smoothLaneChange, smoothLaneChangeRate } from '../src/game/traffic';
+import { carContact } from '../src/game/contact';
 import { LANE_WIDTH } from '../src/game/world';
 
 describe('traffic formation planning', () => {
@@ -66,25 +67,17 @@ describe('traffic formation planning', () => {
   });
 
   it('treats a shallow high-speed side graze as a survivable scrape', () => {
-    const impact = classifyTrafficImpact({
-      overlapX: .045,
-      overlapZ: 1.25,
-      relativeForwardSpeed: 44,
-      relativeLateralSpeed: 1.4,
-    });
+    const shell = { x: 0, z: 0, yaw: 0, halfWidth: .81, halfLength: 2, vx: 0, vz: 24 };
+    const impact = carContact({ ...shell, x: 1.575, z: 1, vx: -1.4, vz: 68 }, shell)!;
     expect(impact.scrape).toBe(true);
-    expect(impact.severity).toBeLessThan(26);
+    expect(impact.closingSpeed).toBeCloseTo(1.4);
   });
 
   it('keeps a direct high-relative-speed rear impact severe', () => {
-    const impact = classifyTrafficImpact({
-      overlapX: 1.1,
-      overlapZ: .24,
-      relativeForwardSpeed: 40,
-      relativeLateralSpeed: 0,
-    });
+    const shell = { x: 0, z: 0, yaw: 0, halfWidth: .81, halfLength: 2, vx: 0, vz: 24 };
+    const impact = carContact({ ...shell, z: -3.76, vz: 64 }, shell)!;
     expect(impact.scrape).toBe(false);
-    expect(impact.severity).toBeGreaterThan(36);
+    expect(impact.closingSpeed).toBe(40);
   });
 
   it('expands a rotated collision footprint so drifted corners cannot clip through traffic', () => {

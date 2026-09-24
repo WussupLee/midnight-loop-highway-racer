@@ -58,7 +58,7 @@ describe('near-miss scoring', () => {
   });
 
   it('recognizes opposite-side passes from the same overlap window as Thread the Needle', () => {
-    const first = { id: 1, time: 1, overlapAt: .5, clearance: .3, playerSpeed: 55, relativeSpeed: 25, side: 'left' as const, perfect: true, points: 1000 };
+    const first = { id: 1, time: 1, overlapAt: .5, overlapEndAt: 1.1, clearance: .3, playerSpeed: 55, relativeSpeed: 25, side: 'left' as const, perfect: true, points: 1000 };
     const second = { ...first, id: 2, time: 1.8, overlapAt: 1.08, side: 'right' as const };
     expect(isThreadNeedlePair(first, second)).toBe(true);
     expect(isThreadNeedlePair(first, { ...second, overlapAt: 1.3 })).toBe(false);

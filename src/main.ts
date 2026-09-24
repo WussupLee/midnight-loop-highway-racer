@@ -1,4 +1,8 @@
 import './style.css';
+import { dialMarkup, dialAngle, dampNeedle, SPEED_DIAL, RPM_DIAL } from './game/instruments';
+import { ScoreLedger, type ScoreSource } from './game/scoreLedger';
+import { carContact } from './game/contact';
+import { HANDLING } from './game/vehicle';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -9,9 +13,9 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { GameAudio, isEngineOption, type EngineOption } from './game/audio';
 import { CAR_DEFINITIONS, adjacentCar, carDefinition, isCarId, type CarId } from './game/carSelection';
 import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileControls, setMobileControl, steeringActionForPointerX, tiltGammaToDriverSteer, type MobileControlAction, type MobileControlMode } from './game/mobileControls';
-import { bankDriftScore, createDriftState, updateDrift, type DriftState } from './game/drift';
+import { createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
-import { TrafficManager, classifyTrafficImpact, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
+import { TrafficManager, projectedCollisionFootprint, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
 import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
 import { ChaseCamera, RunIntroCamera, SpeedStreaks, createKitsuneCar, createPlayerCar, type PlayerCarVisual } from './game/visuals';
 import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading, tunnelAcousticAmount } from './game/world';
@@ -100,6 +104,8 @@ const comboText = element('combo');
 const comboTimer = element('combo-timer');
 const speedText = element('speed');
 const gearText = element('gear');
+element('rpm-face').innerHTML = dialMarkup(RPM_DIAL, 'tach-needle');
+element('speed-face').innerHTML = dialMarkup(SPEED_DIAL, 'speed-needle');
 const tachNeedle = element('tach-needle');
 const speedNeedle = element('speed-needle');
 const rpmValueText = element('rpm-value');
@@ -134,12 +140,16 @@ function formatScore(value: number): string {
 }
 
 function safeHighScore(): number {
-  try { return Number.parseInt(localStorage.getItem('midnight-loop-high-score') ?? localStorage.getItem('nitro-veil-high-score') ?? '0', 10) || 0; }
+  try { return Number.parseInt(localStorage.getItem('midnight-loop-v2-high-score') ?? '0', 10) || 0; }
   catch { return 0; }
 }
 
 let highScore = safeHighScore();
 menuHighScoreText.textContent = formatScore(highScore);
+try {
+  const legacy = Number(localStorage.getItem('midnight-loop-high-score') ?? localStorage.getItem('nitro-veil-high-score') ?? 0);
+  element('legacy-record').textContent = legacy > 0 ? `LEGACY RECORD  ${formatScore(legacy)}` : '';
+} catch { /* Records remain playable without storage. */ }
 highScoreText.textContent = formatScore(highScore);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !MOBILE_DEVICE, powerPreference: 'high-performance', alpha: false });
@@ -363,18 +373,24 @@ function addStars(): void {
 }
 addStars();
 
+element('loading-stage').textContent = 'INITIALIZING VEHICLE DYNAMICS';
 await RAPIER.init();
 const physics = new RAPIER.World({ x: 0, y: 0, z: 0 });
 physics.timestep = 1 / 120;
+element('loading-stage').textContent = 'BUILDING INTERSTATE 45';
 const highway = new HighwayWorld(scene, renderer);
 const asterionCar = createPlayerCar(scene);
 let kitsuneCar: PlayerCarVisual;
 try {
+  element('loading-stage').textContent = 'PREPARING THE GARAGE';
   kitsuneCar = await createKitsuneCar(scene);
 } catch (error) {
   console.warn('KITSUNE R-SPEC model failed to load; using a safe visual fallback.', error);
   kitsuneCar = createPlayerCar(scene);
   kitsuneCar.group.name = 'Kitsune R-Spec fallback visual';
+  element('asset-status').textContent = 'KITSUNE UNAVAILABLE / ASTERION LOAN CAR ACTIVE';
+  const retry = document.createElement('button'); retry.textContent = 'RETRY GARAGE'; retry.className = 'ghost-button';
+  retry.addEventListener('click', () => location.reload()); element('asset-status').append(retry);
 }
 const playerCars: Record<CarId, PlayerCarVisual> = {
   'asterion-vxr': asterionCar,
@@ -420,6 +436,16 @@ const passTracker = new NearMissTracker();
 let vehicle = createVehicleState();
 let combo = createCombo();
 let stats: RunStats = { score: 0, nearMisses: 0, driftPoints: 0, topSpeed: vehicle.speedMph, elapsed: 0 };
+const ledger = new ScoreLedger();
+let speedScoreRemainder = 0;
+let scoreSerial = 0;
+let draftEligibleUntil = 0;
+const needlePairs = new Set<string>();
+function awardScore(id: string, source: ScoreSource, points: number, multiplier = 1): number {
+  const added = ledger.award(id, source, points, multiplier);
+  stats.score = ledger.total;
+  return added;
+}
 let drift: DriftState = createDriftState();
 let lastSpeedRiskTier = 1;
 let mode: GameMode = 'menu';
@@ -562,7 +588,7 @@ function stepCarSelection(direction: -1 | 1): void {
 }
 
 function updateShowroom(dt: number, now: number): void {
-  if (!showroomDragging && now >= showroomAutoResumeAt) showroomYaw += dt * .34;
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches && !showroomDragging && now >= showroomAutoResumeAt) showroomYaw += dt * .34;
   showroomVehicle.x = roadCenterX(16);
   showroomVehicle.z = 16;
   showroomVehicle.yaw = showroomYaw;
@@ -624,6 +650,9 @@ function startRun(): void {
   configureRoadRoute(DEBUG ? 20260814 : Math.floor(Math.random() * 2147483646) + 1);
   vehicle = createVehicleState();
   combo = createCombo();
+  calloutQueue.length = 0; calloutUntil = 0;
+  element('drift-pending').textContent = '';
+  ledger.reset(); speedScoreRemainder = 0; scoreSerial = 0; needlePairs.clear();
   stats = { score: 0, nearMisses: 0, driftPoints: 0, topSpeed: vehicle.speedMph, elapsed: 0 };
   drift = createDriftState();
   lastSpeedRiskTier = 1;
@@ -639,7 +668,7 @@ function startRun(): void {
   lastPass = null;
   draftVehicleId = -1;
   draftedVehicleId = -1;
-  draftTime = 0;
+  draftTime = 0; draftEligibleUntil = 0;
   passTracker.reset();
   highway.reset(vehicle.z, true);
   traffic.density = Number.parseFloat(trafficSelect.value);
@@ -665,10 +694,11 @@ function startRun(): void {
     setMode('intro');
     runIntroCamera.start(vehicle, chaseCamera.getPose());
   }
-  updateHud();
+  updateHud(1);
 }
 
 function quitToMenu(): void {
+  drift = createDriftState(); calloutQueue.length = 0; element('drift-pending').textContent = '';
   pressed.clear();
   runIntroCamera.cancel();
   audio.stopMusic();
@@ -713,6 +743,7 @@ function toggleCamera(): string {
 
 function recoverCurrentVehicle(): void {
   if (mode !== 'running') return;
+  drift = createDriftState(); draftedVehicleId = -1; element('drift-pending').textContent = '';
   recoverVehicle(vehicle);
   previousPose.x = vehicle.x;
   previousPose.z = vehicle.z;
@@ -725,18 +756,20 @@ function endRun(): void {
   if (mode === 'gameover') return;
   if (stats.score > highScore) {
     highScore = Math.round(stats.score);
-    try { localStorage.setItem('midnight-loop-high-score', String(highScore)); } catch { /* privacy mode */ }
+    try { localStorage.setItem('midnight-loop-v2-high-score', String(highScore)); } catch { /* privacy mode */ }
   }
   highScoreText.textContent = formatScore(highScore);
   finalScoreText.textContent = formatScore(stats.score);
   finalComboText.textContent = `×${combo.bestMultiplier.toFixed(2)}`;
   finalSpeedText.textContent = `${Math.round(stats.topSpeed)} MPH`;
   finalMissesText.textContent = `${stats.nearMisses}`;
+  element('score-breakdown').textContent = Object.entries(ledger.totals).map(([key, value]) => `${key.toUpperCase()}  ${formatScore(value)}`).join('   /   ');
   setMode('gameover');
   crashBlackout.classList.remove('active');
 }
 
 function beginCrash(severity: number): void {
+  drift = createDriftState(); element('drift-pending').textContent = ''; calloutQueue.length = 0;
   if (mode !== 'running') return;
   mode = 'crashing';
   crashTimer = 1.05;
@@ -788,52 +821,51 @@ function getInput(): DriverInput {
 }
 
 function handleImpact(collision: TrafficCollision | null, barrierSeverity = 0): void {
-  const severity = collision?.severity ?? barrierSeverity;
-  if (severity < 2 || vehicle.collisionCooldown > 0) return;
-  lastImpactKind = collision ? (collision.scrape ? 'scrape' : 'impact') : 'barrier';
-  lastImpactSeverity = severity;
+  const closingSpeed = collision?.closingSpeed ?? barrierSeverity;
+  // Correction and score invalidation always run, including during effect cooldowns.
   if (collision) {
     passTracker.markCollision(collision.vehicle.id);
     vehicle.x += collision.correctionX ?? 0;
     vehicle.z += collision.correctionZ ?? 0;
-    applyCollisionImpulse(vehicle, collision.normalX, collision.normalZ, severity, collision.scrape);
-  } else {
-    vehicle.collisionCooldown = .34;
+    if (closingSpeed > 0) applyCollisionImpulse(vehicle, collision.normalX, collision.normalZ, closingSpeed, collision.scrape, collision.lever);
   }
-  combo = breakCombo(combo, severity < 28);
-  if (severity >= 36 || (severity > 26 && vehicle.speedMph > 115)) beginCrash(severity);
+  drift = createDriftState(); element('drift-pending').textContent = '';
+  draftedVehicleId = -1; draftEligibleUntil = 0;
+  if (collision?.notify === false || (!collision && vehicle.collisionCooldown > 0)) return;
+  lastImpactKind = collision ? (collision.scrape ? 'scrape' : 'impact') : 'barrier';
+  lastImpactSeverity = closingSpeed;
+  vehicle.collisionCooldown = .34;
+  combo = breakCombo(combo, collision?.scrape ?? closingSpeed < 7);
+  if (closingSpeed >= HANDLING.fatalClosingSpeed) beginCrash(closingSpeed * 1.5);
   else {
-    audio.collision(severity, collision?.scrape ?? !collision);
-    chaseCamera.hit(Math.min(1.2, severity / 38));
-    damageUntil = runClock + Math.min(.38, .11 + severity * .004);
-    showCallout(severity > 22 ? 'HARD CONTACT' : 'BODY SCRAPE', '', .55);
+    audio.collision(Math.max(4, closingSpeed * 1.5), collision?.scrape ?? true);
+    chaseCamera.hit(Math.min(.7, closingSpeed / 35));
+    damageUntil = runClock + Math.min(.32, .10 + closingSpeed * .006);
+    showCallout(closingSpeed > 10 ? 'HARD CONTACT // KEEP GOING' : 'BODY SCRAPE', '', .65);
   }
 }
 
 function awardNearMiss(event: NearMissEvent): void {
-  stats.score += event.points;
+  const multiplier = event.appliedMultiplier ?? combo.multiplier * speedRiskMultiplier(vehicle.speedMph);
+  awardScore(`pass:${event.id}`, 'pass', event.points / multiplier, multiplier);
   stats.nearMisses += 1;
-  combo = addToCombo(combo, runClock);
   vehicle.boost = Math.min(1, vehicle.boost + (event.perfect ? .16 : .075) + Math.max(0, .07 - event.clearance * .022));
-  const drafted = draftedVehicleId === event.id;
-  if (drafted) {
-    const bonus = Math.round(420 * combo.multiplier);
-    stats.score += bonus;
+  showCallout(`${event.perfect ? 'PERFECT PASS' : 'NEAR MISS'} +${event.points}`, event.perfect ? 'perfect' : '', .9);
+  if (draftedVehicleId === event.id && runClock <= draftEligibleUntil) {
+    const bonus = awardScore(`draft:${event.id}`, 'draft', 420, multiplier);
     showCallout(`DRAFT RELEASE +${bonus}`, '', .9);
     draftedVehicleId = -1;
-  } else {
-    showCallout(`${event.perfect ? 'PERFECT PASS' : 'NEAR MISS'} +${event.points}`, event.perfect ? 'perfect' : '', .9);
   }
   audio.nearMiss(event.perfect);
-
-  if (lastPass && isThreadNeedlePair(lastPass, event)) {
-    const bonus = Math.round(1350 * combo.multiplier);
-    stats.score += bonus;
-    combo = addToCombo(combo, runClock, 2);
+  const pair = lastPass ? [lastPass.id, event.id].sort((a,b) => a-b).join(':') : '';
+  if (lastPass && isThreadNeedlePair(lastPass, event) && !needlePairs.has(pair)) {
+    needlePairs.add(pair);
+    const bonus = awardScore(`needle:${pair}`, 'needle', 1350, multiplier);
     vehicle.boost = Math.min(1, vehicle.boost + .28);
     showCallout(`THREAD THE NEEDLE +${bonus}`, 'perfect', 1.25);
     audio.threadNeedle();
   }
+  combo = addToCombo(combo, runClock);
   lastPass = event;
 }
 
@@ -842,8 +874,10 @@ function updateDraft(dt: number): void {
   let best = 25;
   for (const item of traffic.vehicles) {
     if (!item.group.visible) continue;
-    const dz = item.z - vehicle.z;
-    const dx = Math.abs(item.group.position.x - vehicle.x);
+    const heading = roadHeading(vehicle.z);
+    const worldX = item.group.position.x - vehicle.x, worldZ = item.z - vehicle.z;
+    const dz = worldX * Math.sin(heading) + worldZ * Math.cos(heading);
+    const dx = Math.abs(worldX * Math.cos(heading) - worldZ * Math.sin(heading));
     if (dz > 3.5 && dz < best && dx < item.halfWidth + .72 && vehicle.longitudinalSpeed > item.speed + 2.5 && vehicle.speedMps > 34) {
       candidate = item;
       best = dz;
@@ -852,7 +886,7 @@ function updateDraft(dt: number): void {
   if (candidate) {
     if (draftVehicleId === candidate.id) draftTime += dt;
     else { draftVehicleId = candidate.id; draftTime = 0; }
-    if (draftTime > 1.15) draftedVehicleId = candidate.id;
+    if (draftTime > 1.15) { draftedVehicleId = candidate.id; draftEligibleUntil = runClock + 3; }
   } else {
     draftVehicleId = -1;
     draftTime = 0;
@@ -864,6 +898,7 @@ function simulate(dt: number): void {
   previousPose.z = vehicle.z;
   previousPose.yaw = vehicle.yaw;
   runClock += dt;
+  combo = tickCombo(combo, runClock);
   stats.elapsed += dt;
   if (debugScenario === 'duplicate' && debugDuplicateReplayAt > 0 && runClock >= debugDuplicateReplayAt) {
     const primary = traffic.vehicles[0];
@@ -907,44 +942,8 @@ function simulate(dt: number): void {
   if (vehicle.gear !== priorGear && vehicle.gear !== lastGear) audio.gearShift(priorGear, vehicle.gear, vehicle.rpm);
   lastGear = vehicle.gear;
 
-  if (mode === 'running') {
-    const riskMultiplier = combo.multiplier * speedRiskMultiplier(vehicle.speedMph);
-    const driftUpdate = updateDrift(drift, {
-      speedMps: vehicle.speedMps,
-      longitudinalSpeed: vehicle.longitudinalSpeed,
-      lateralSpeed: vehicle.lateralSpeed,
-      yawRate: vehicle.yawRate,
-      handbrake: input.handbrake,
-      now: runClock,
-      dt,
-      multiplier: riskMultiplier,
-    });
-    drift = driftUpdate.state;
-    if (driftUpdate.started) {
-      combo = addToCombo(combo, runClock);
-      showCallout('DRIFT CHAIN', 'drift-award', .5);
-    }
-    if (driftUpdate.scoreDelta > 0) {
-      stats.score += driftUpdate.scoreDelta;
-      stats.driftPoints += driftUpdate.scoreDelta;
-      callout.textContent = `DRIFT +${drift.points}  //  ×${(combo.multiplier * speedRiskMultiplier(vehicle.speedMph)).toFixed(2)}`;
-      callout.className = 'callout drift-award';
-      callout.style.opacity = '1';
-      calloutUntil = runClock + .12;
-    }
-    if (driftUpdate.completedPoints > 0) {
-      const banked = bankDriftScore(stats.score, driftUpdate.completedPoints);
-      stats.score = banked.total;
-      stats.driftPoints += banked.added;
-      combo = addToCombo(combo, runClock);
-      vehicle.boost = Math.min(1, vehicle.boost + Math.min(.18, driftUpdate.completedPoints / 2400));
-      showCallout(`DRIFT +${banked.added}  //  TOTAL ${formatScore(banked.total)}`, 'drift-award', 1.35);
-      audio.driftBonus();
-    }
-  } else {
-    drift = createDriftState();
-  }
 
+  const previousTrafficIds = traffic.vehicles.map(item => item.id);
   const collisions = traffic.update(
     dt,
     vehicle.x,
@@ -955,6 +954,7 @@ function simulate(dt: number): void {
     PLAYER_COLLISION_HALF_WIDTH,
     PLAYER_COLLISION_HALF_LENGTH,
   );
+  for (let i = 0; i < previousTrafficIds.length; i++) if (previousTrafficIds[i] !== traffic.vehicles[i].id) passTracker.forget(previousTrafficIds[i]);
   for (const item of traffic.vehicles) {
     if (item.passedPlayer) {
       const lateralDistance = Math.abs(item.group.position.x - vehicle.x);
@@ -971,7 +971,7 @@ function simulate(dt: number): void {
     collisionIds.add(collision.vehicle.id);
     handleImpact(collision);
   }
-  if (mode === 'running' && !debugAutoDrive && !debugDrift && !debugHandlingMode && result.barrierImpact > 3) handleImpact(null, result.barrierImpact);
+  if (mode === 'running' && !debugAutoDrive && !debugDrift && !debugHandlingMode && result.barrierImpact > 0) handleImpact(null, result.barrierImpact);
 
   const playerRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, vehicle.yaw, 0));
   playerBody.setNextKinematicTranslation({ x: vehicle.x, y: roadCenterY(vehicle.z) + .65, z: vehicle.z });
@@ -991,58 +991,82 @@ function simulate(dt: number): void {
     if (!penetrating) return;
     rapierContactCount += 1;
     collisionIds.add(item.id);
-    const dx = vehicle.x - item.group.position.x;
-    const dz = vehicle.z - item.z;
-    const heading = roadHeading(vehicle.z);
-    const overlapX = Math.max(0, PLAYER_COLLISION_HALF_WIDTH + item.collisionHalfWidth - Math.abs(dx));
-    const overlapZ = Math.max(0, PLAYER_COLLISION_HALF_LENGTH + item.collisionHalfLength - Math.abs(dz));
-    const roadYaw = roadHeading(vehicle.z);
-    const playerLateral = vehicle.vx * Math.cos(roadYaw) - vehicle.vz * Math.sin(roadYaw);
-    const trafficLateral = item.speed * Math.sin((item.targetLane - item.lanePosition) * .065);
-    const impact = classifyTrafficImpact({
-      overlapX,
-      overlapZ,
-      relativeForwardSpeed: vehicle.speedMps - item.speed,
-      relativeLateralSpeed: playerLateral - trafficLateral,
-    });
-    const rearHit = !impact.scrape;
-    const side = Math.sign(dx || 1);
-    const normalX = rearHit ? -Math.sin(heading) * Math.sign(dz || 1) : -Math.cos(heading) * side;
-    const normalZ = rearHit ? -Math.cos(heading) * Math.sign(dz || 1) : Math.sin(heading) * side;
-    const penetration = (impact.scrape ? overlapX : overlapZ) + .035;
+    const contact = carContact(
+      { x: vehicle.x, z: vehicle.z, yaw: vehicle.yaw, vx: vehicle.vx, vz: vehicle.vz, halfWidth: PLAYER_COLLISION_HALF_WIDTH, halfLength: PLAYER_COLLISION_HALF_LENGTH },
+      { x: item.group.position.x, z: item.z, yaw: item.group.rotation.y, vx: item.vx, vz: item.vz, halfWidth: item.collisionHalfWidth, halfLength: item.collisionHalfLength },
+    );
+    if (!contact) return;
+    handleImpact({ vehicle: item, severity: contact.closingSpeed, closingSpeed: contact.closingSpeed,
+      normalX: contact.normalX, normalZ: contact.normalZ, scrape: contact.scrape, lever: contact.lever,
+      notify: item.collisionCooldown <= 0, correctionX: -contact.normalX * contact.penetration, correctionZ: -contact.normalZ * contact.penetration });
     item.collisionCooldown = .7;
-    handleImpact({
-      vehicle: item, severity: impact.severity, normalX, normalZ, scrape: impact.scrape,
-      correctionX: -normalX * penetration,
-      correctionZ: -normalZ * penetration,
-    });
   });
 
   if (mode === 'running') {
+    const riskMultiplier = combo.multiplier * speedRiskMultiplier(vehicle.speedMph);
+    const driftUpdate = updateDrift(drift, {
+      speedMps: vehicle.speedMps,
+      longitudinalSpeed: vehicle.longitudinalSpeed,
+      lateralSpeed: vehicle.lateralSpeed,
+      yawRate: vehicle.yawRate,
+      handbrake: input.handbrake,
+      now: runClock,
+      dt,
+      multiplier: riskMultiplier,
+      invalidated: collisionIds.size > 0 || result.barrierImpact > 0,
+    });
+    drift = driftUpdate.state;
+    element('drift-pending').textContent = drift.active ? `DRIFT  ${drift.points.toLocaleString()}  /  UNBANKED` : '';
+    if (driftUpdate.completedPoints > 0) {
+      const added = awardScore(`drift:${scoreSerial++}`, 'drift', driftUpdate.completedPoints);
+      stats.driftPoints += added;
+      combo = addToCombo(combo, runClock);
+      vehicle.boost = Math.min(1, vehicle.boost + Math.min(.18, driftUpdate.completedPoints / 2400));
+      showCallout(`DRIFT +${added}  //  TOTAL ${formatScore(stats.score)}`, 'drift-award', 1.35);
+      audio.driftBonus();
+    }
+  } else {
+    drift = createDriftState();
+  }
+
+  if (mode === 'running') {
+    const passMultiplier = combo.multiplier * speedRiskMultiplier(vehicle.speedMph);
     for (const item of traffic.vehicles) {
       if (!item.group.visible || Math.abs(item.z - vehicle.z) > 45) continue;
+      const heading = roadHeading(vehicle.z);
+      const relativeX = item.group.position.x - vehicle.x;
+      const relativeZ = item.z - vehicle.z;
+      const playerFootprint = projectedCollisionFootprint(PLAYER_COLLISION_HALF_WIDTH, PLAYER_COLLISION_HALF_LENGTH, vehicle.yaw - heading);
+      const trafficFootprint = projectedCollisionFootprint(item.collisionHalfWidth, item.collisionHalfLength, item.group.rotation.y - heading);
       const event = passTracker.sample({
         id: item.id,
         now: runClock,
-        playerX: vehicle.x,
-        playerZ: vehicle.z,
-        playerHalfWidth: PLAYER_COLLISION_HALF_WIDTH,
-        playerHalfLength: PLAYER_COLLISION_HALF_LENGTH,
+        playerX: 0,
+        playerZ: 0,
+        playerHalfWidth: playerFootprint.halfWidth,
+        playerHalfLength: playerFootprint.halfLength,
         playerSpeed: Math.max(0, vehicle.longitudinalSpeed),
-        trafficX: item.group.position.x,
-        trafficZ: item.z,
-        trafficHalfWidth: item.collisionHalfWidth,
-        trafficHalfLength: item.collisionHalfLength,
+        trafficX: relativeX * Math.cos(heading) - relativeZ * Math.sin(heading),
+        trafficZ: relativeX * Math.sin(heading) + relativeZ * Math.cos(heading),
+        trafficHalfWidth: trafficFootprint.halfWidth,
+        trafficHalfLength: trafficFootprint.halfLength,
         trafficSpeed: item.speed,
         collided: collisionIds.has(item.id),
-      }, combo.multiplier * speedRiskMultiplier(vehicle.speedMph));
+      }, passMultiplier);
       if (event) awardNearMiss(event);
     }
     combo = tickCombo(combo, runClock);
     updateDraft(dt);
     stats.topSpeed = Math.max(stats.topSpeed, vehicle.speedMph);
     const speedTier = speedRiskMultiplier(vehicle.speedMph);
-    if (!debugScenario) stats.score += calculateHighSpeedScore(vehicle.speedMph, dt, combo.multiplier);
+    if (!debugScenario) {
+      speedScoreRemainder += calculateHighSpeedScore(vehicle.speedMph, dt, combo.multiplier);
+      if (speedScoreRemainder >= 1) {
+        const whole = Math.floor(speedScoreRemainder);
+        awardScore(`speed:${scoreSerial++}`, 'speed', whole);
+        speedScoreRemainder -= whole;
+      }
+    }
     if (speedTier > lastSpeedRiskTier) showCallout(`HIGH SPEED // RISK ×${(combo.multiplier * speedTier).toFixed(2)}`, 'perfect', .75);
     lastSpeedRiskTier = speedTier;
   } else if (mode === 'crashing') {
@@ -1051,33 +1075,42 @@ function simulate(dt: number): void {
   }
 }
 
+const calloutQueue: { text: string; className: string; duration: number }[] = [];
 function showCallout(text: string, className = '', duration = .8): void {
-  callout.textContent = text;
-  callout.className = `callout ${className}`.trim();
-  calloutUntil = runClock + duration;
+  if (calloutQueue.some(item => item.text === text)) return;
+  if (calloutQueue.length >= 5) calloutQueue.shift();
+  calloutQueue.push({ text, className, duration });
+  if (runClock >= calloutUntil) nextCallout();
+}
+function nextCallout(): void {
+  const next = calloutQueue.shift();
+  if (!next) { callout.style.opacity = '0'; return; }
+  callout.textContent = next.text;
+  callout.className = `callout ${next.className}`;
+  calloutUntil = runClock + next.duration;
   callout.style.opacity = '1';
-  callout.style.transform = 'skewX(-8deg) scale(1.08)';
-  requestAnimationFrame(() => { callout.style.transform = 'skewX(-8deg) scale(1)'; });
 }
 
-function updateHud(): void {
+let displayRpm = 4300, displaySpeed = 80;
+function updateHud(dt: number): void {
   scoreText.textContent = formatScore(stats.score);
   highScoreText.textContent = formatScore(Math.max(highScore, stats.score));
   speedText.textContent = Math.round(Math.max(0, vehicle.speedMph)).toString().padStart(3, '0');
   gearText.textContent = vehicle.longitudinalSpeed < -1 ? 'R' : String(vehicle.gear);
   rpmValueText.textContent = Math.round(vehicle.rpm).toString().padStart(4, '0');
-  const tachRotation = -132 + Math.min(1, vehicle.rpm / 7800) * 264;
-  tachNeedle.style.transform = `rotate(${tachRotation}deg)`;
-  const speedRotation = -128 + Math.min(1, Math.max(0, vehicle.speedMph) / 200) * 256;
-  speedNeedle.style.transform = `rotate(${speedRotation}deg)`;
+  displayRpm = dampNeedle(displayRpm, vehicle.rpm, dt);
+  displaySpeed = dampNeedle(displaySpeed, vehicle.speedMph, dt);
+  tachNeedle.style.transform = `rotate(${dialAngle(displayRpm, RPM_DIAL)}deg)`;
+  speedNeedle.style.transform = `rotate(${dialAngle(displaySpeed, SPEED_DIAL)}deg)`;
   boostFill.style.transform = `scaleX(${vehicle.boost})`;
   boostVignette.classList.toggle('active', vehicle.boostActive);
-  comboText.textContent = `×${(combo.multiplier * speedRiskMultiplier(vehicle.speedMph)).toFixed(2)}`;
+  comboText.textContent = `×${combo.multiplier.toFixed(2)}`;
+  element('speed-risk').textContent = `SPEED ×${speedRiskMultiplier(vehicle.speedMph).toFixed(2)}`;
   comboWrap.classList.toggle('active', combo.chain > 0);
   const remaining = combo.chain > 0 ? Math.max(0, (combo.expiresAt - runClock) / PASS_CONFIG.comboWindow) : 0;
   comboTimer.style.transform = `scaleX(${remaining})`;
   damageFlash.classList.toggle('active', runClock < damageUntil);
-  if (runClock > calloutUntil) callout.style.opacity = '0';
+  if (runClock > calloutUntil) nextCallout();
 }
 
 function debugSnapshot(): DebugSnapshot {
@@ -1129,6 +1162,9 @@ function setScenario(name: ScenarioName): void {
   lastImpactKind = 'none';
   lastImpactSeverity = 0;
   vehicle.collisionCooldown = 0;
+  calloutQueue.length = 0; calloutUntil = 0;
+  element('drift-pending').textContent = '';
+  ledger.reset(); speedScoreRemainder = 0; scoreSerial = 0; needlePairs.clear();
   stats.score = 0;
   stats.nearMisses = 0;
   stats.driftPoints = 0;
@@ -1504,7 +1540,7 @@ function frame(timeMs: number): void {
   neutralFill.position.z = vehicle.z + 125;
   neutralFill.position.x = vehicle.x - 48;
   audio.update(vehicle, realDt, mode === 'intro' || mode === 'running', tunnelAcousticAmount(vehicle.z));
-  if (mode !== 'menu') updateHud();
+  if (mode !== 'menu') updateHud(realDt);
   updateDebug();
   bloomPass.enabled = bloomCheckbox.checked;
   cameraPass.uniforms.uTime.value = now;
@@ -1517,6 +1553,7 @@ function frame(timeMs: number): void {
 
 requestAnimationFrame(frame);
 resize();
+element('loading-stage').textContent = 'GARAGE READY / START YOUR RUN';
 setTimeout(() => {
   loading.classList.add('fade');
   setTimeout(() => loading.classList.add('hidden'), 520);
