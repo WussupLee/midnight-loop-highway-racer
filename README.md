@@ -54,7 +54,7 @@ The Driver Controls menu also offers Tilt Steering. This mode auto-accelerates, 
 
 Steering is speed-sensitive and smoothed for keyboard play. Combined axle grip limits and progressive tire saturation supply the base response; bounded body-slip and yaw assistance keep fast countersteering manageable. No road-velocity target moves the car between lanes. Grip assistance fades continuously into a deliberate handbrake slide and returns progressively during recovery. Service braking remains distinct from handbraking. Throttle demand can kick down the automatic gearbox for a stronger passing response.
 
-Traffic uses slightly inset oriented collision shells. Side scrapes nudge the player and reduce the combo; moderate impacts slow and deflect the car without ending the run. Extreme impacts at 30 m/s normal closing speed end the run. Contact correction continues during effect cooldowns, and the manual and Rapier contact paths share one response calculation.
+Traffic uses slightly inset oriented collision shells. Side scrapes nudge the player and reduce the combo; moderate impacts slow and deflect the car without ending the run. Hard impacts at 18 m/s normal closing speed (about 40 mph relative to the other car or wall) end the run, including during effect cooldowns. Contact correction continues during cooldowns, and the manual and Rapier contact paths share one response calculation.
 
 ## How to score
 

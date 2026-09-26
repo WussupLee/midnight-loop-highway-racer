@@ -36,14 +36,14 @@ Both selectable cars retain identical physics. Their authored wheel radii affect
 - Drift accrual uses the current chain × speed multiplier each physics tick; already accrued points are not multiplied again at banking. Initiation never increments the chain. One completed drift increments it once.
 - Passive high-speed points use chain only. Fractions accumulate without per-frame rounding loss.
 - Light scrapes reduce the chain; harder contact resets it. Any contact cancels a pending drift. Earned run points are retained.
-- A normal closing speed of 30 m/s triggers an extreme crash. Absolute road speed does not determine whether a scrape is fatal.
+- A normal closing speed of 18 m/s triggers a crash, including during sound/penalty cooldowns. Absolute road speed does not determine whether a scrape is fatal.
 - Series 02 records use `midnight-loop-v2-high-score`; prior scores remain stored and appear as a labeled legacy record. Existing vehicle, audio, and control preferences are preserved.
 
 ## Validation and remaining limitations
 
-99 tests pass, TypeScript checks pass, and production bundling succeeds. Existing warnings: Rapier initialization deprecation and the large Three.js/Rapier bundle advisory. Neither is a new runtime-error finding.
+As of 2026-09-25, 105 tests pass, TypeScript checks pass, and production bundling succeeds. Existing warnings: Rapier initialization deprecation and the large Three.js/Rapier bundle advisory. Neither is a new runtime-error finding.
 
-Browser automation could not initialize in this environment. No fresh browser screenshots, JavaScript-console audit, GPU frame-time benchmark, or physical-phone validation is claimed. Earlier screenshots are historical and are not evidence for this revision.
+The in-app browser could not initialize. A separate headless Chromium run on 2026-09-25 verified collision → results → restart, survivable side scrapes, and restoration/hiding of touch controls. No page JavaScript errors were recorded. Fresh screenshots and DOM bounds checks verified the gauges do not overlap controls, score, or callouts at 390×700, 390×844, 360×640, 320×568, 430×932, 844×390, and 568×320. Local evidence is in `work/verification/`. This does not establish physical-phone behavior or GPU performance.
 
 Remaining visual acceptance checks: inspect loading, both showroom cars, expanded settings, active driving, pause, crash, results, and restart at 1280×720, 1920×1080, 390×844, and 360×640. Check wheel position while steering/drifting, gauge readability without covering the car, combined touch inputs, tilt calibration, lost-pointer cleanup, audio unlock, and five-minute frame-time stability on actual iOS/Android hardware. Compare each device against the previous build on that same device; aim for 60 FPS where hardware supports it.
 

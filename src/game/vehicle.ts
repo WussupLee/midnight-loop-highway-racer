@@ -63,8 +63,15 @@ export function digitalSteer(leftPressed: boolean, rightPressed: boolean): numbe
 export const HANDLING = {
   mass: 1360, throttleResponse: 14, releaseResponse: 9, shiftUpRpm: 7200,
   shiftDownRpm: 2600, kickdownRpm: 4300, gripRecoverySeconds: .6,
-  fatalClosingSpeed: 30, restitution: .08,
+  // About 40 mph of velocity into the other car/wall, not total road speed.
+  fatalClosingSpeed: 18, restitution: .08,
 } as const;
+
+/** Cooldowns suppress repeated effects only; a hard impact always ends the run. */
+export function collisionOutcome(closingSpeed: number, effectsReady: boolean): 'crash' | 'contact' | 'silent' {
+  if (closingSpeed >= HANDLING.fatalClosingSpeed) return 'crash';
+  return effectsReady ? 'contact' : 'silent';
+}
 const MASS = HANDLING.mass;
 const GRAVITY = 9.81;
 const WHEELBASE = 2.62;

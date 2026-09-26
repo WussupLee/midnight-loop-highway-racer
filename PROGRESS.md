@@ -513,3 +513,12 @@
 - Restored full clean-exit drift banking, removed live score additions and the extra finish bonus, added a category ledger, consistent multiplier snapshots, draft expiry, verified needle windows, and separate legacy/Series 02 records.
 - Replaced legacy shell theme layers with shared charcoal/ivory/acid-green styling. Added calibrated SVG gauges, pending drift feedback, queued award callouts, score breakdown, loading stages, recoverable imported-model error messaging, and reduced-motion styling.
 - 99 automated tests pass, including actual GLB hub invariance and 60/100/140 MPH physical scenarios. TypeScript passes. Browser automation initialization is unavailable, so fresh screenshots and physical-phone validation are explicitly pending in REVIEW.md. No deployment was performed.
+
+## 2026-09-25 — Mobile gauges and run-ending collisions
+
+- Moved portrait instruments to a compact, safe-area-aware upper-right cluster beside the score, below the utility buttons. Short landscape screens place them between steering and pedals. Callouts clear the cluster at every tested size.
+- Lowered fatal normal closing speed from 30 to 18 m/s so hard highway rear-end and wall impacts end the run while glancing scrapes and moderate bumps remain survivable.
+- Made fatal classification independent of effect cooldowns in both contact paths. Entering a crash now uses the shared mode transition to hide touch controls and release held inputs.
+- Added six collision regressions covering ordinary highway rear-end speeds, cooldowns, threshold boundaries, side scrapes, walls, and swept impacts. All 105 tests, TypeScript, and production build pass.
+- Separate headless Chromium checks passed collision → results → restart, survivable scraping, and gauge/control/score/callout separation at seven phone viewports from 320×568 to 430×932 and landscape 568×320 / 844×390. No page JavaScript errors. Screenshots and bounds report: `work/verification/`.
+- Changes are local; no GitHub Pages publication or physical-device test was performed.

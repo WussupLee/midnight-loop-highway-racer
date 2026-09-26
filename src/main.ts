@@ -2,7 +2,6 @@ import './style.css';
 import { dialMarkup, dialAngle, dampNeedle, SPEED_DIAL, RPM_DIAL } from './game/instruments';
 import { ScoreLedger, type ScoreSource } from './game/scoreLedger';
 import { carContact } from './game/contact';
-import { HANDLING } from './game/vehicle';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -16,7 +15,7 @@ import { createMobileInputState, isBoostSwipe, mobileDriverInput, resetMobileCon
 import { createDriftState, updateDrift, type DriftState } from './game/drift';
 import { PASS_CONFIG, NearMissTracker, addToCombo, breakCombo, calculateHighSpeedScore, createCombo, isThreadNeedlePair, speedRiskMultiplier, tickCombo, type ComboState, type NearMissEvent } from './game/scoring';
 import { TrafficManager, projectedCollisionFootprint, maximumOccupiedLanesInBand, type TrafficCollision, type TrafficVehicle } from './game/traffic';
-import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
+import { PLAYER_COLLISION_HALF_LENGTH, PLAYER_COLLISION_HALF_WIDTH, applyCollisionImpulse, collisionOutcome, createVehicleState, digitalSteer, recoverVehicle, stepVehicle, type DriverInput, type VehicleState } from './game/vehicle';
 import { ChaseCamera, RunIntroCamera, SpeedStreaks, createKitsuneCar, createPlayerCar, type PlayerCarVisual } from './game/visuals';
 import { HighwayWorld, LANE_OFFSETS, LANE_WIDTH, configureRoadRoute, laneX, roadCenterX, roadCenterY, roadHeading, tunnelAcousticAmount } from './game/world';
 
@@ -771,7 +770,7 @@ function endRun(): void {
 function beginCrash(severity: number): void {
   drift = createDriftState(); element('drift-pending').textContent = ''; calloutQueue.length = 0;
   if (mode !== 'running') return;
-  mode = 'crashing';
+  setMode('crashing');
   crashTimer = 1.05;
   combo = breakCombo(combo);
   crashBlackout.classList.add('active');
@@ -822,6 +821,7 @@ function getInput(): DriverInput {
 
 function handleImpact(collision: TrafficCollision | null, barrierSeverity = 0): void {
   const closingSpeed = collision?.closingSpeed ?? barrierSeverity;
+  const outcome = collisionOutcome(closingSpeed, collision ? collision.notify !== false : vehicle.collisionCooldown <= 0);
   // Correction and score invalidation always run, including during effect cooldowns.
   if (collision) {
     passTracker.markCollision(collision.vehicle.id);
@@ -831,12 +831,12 @@ function handleImpact(collision: TrafficCollision | null, barrierSeverity = 0): 
   }
   drift = createDriftState(); element('drift-pending').textContent = '';
   draftedVehicleId = -1; draftEligibleUntil = 0;
-  if (collision?.notify === false || (!collision && vehicle.collisionCooldown > 0)) return;
+  if (outcome === 'silent') return;
   lastImpactKind = collision ? (collision.scrape ? 'scrape' : 'impact') : 'barrier';
   lastImpactSeverity = closingSpeed;
   vehicle.collisionCooldown = .34;
   combo = breakCombo(combo, collision?.scrape ?? closingSpeed < 7);
-  if (closingSpeed >= HANDLING.fatalClosingSpeed) beginCrash(closingSpeed * 1.5);
+  if (outcome === 'crash') beginCrash(closingSpeed * 1.5);
   else {
     audio.collision(Math.max(4, closingSpeed * 1.5), collision?.scrape ?? true);
     chaseCamera.hit(Math.min(.7, closingSpeed / 35));
@@ -981,7 +981,7 @@ function simulate(dt: number): void {
   physics.contactPairsWith(playerCollider, (otherCollider) => {
     if (mode === 'intro' || debugAutoDrive || debugDrift || debugHandlingMode) return;
     const item = traffic.vehicleForCollider(otherCollider.handle);
-    if (!item || collisionIds.has(item.id) || item.collisionCooldown > 0) return;
+    if (!item || collisionIds.has(item.id)) return;
     let penetrating = false;
     physics.contactPair(playerCollider, otherCollider, (manifold) => {
       for (let index = 0; index < manifold.numContacts(); index += 1) {

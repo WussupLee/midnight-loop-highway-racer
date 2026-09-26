@@ -82,7 +82,6 @@
   .hud-top-left .score { font-size: 25px; }.hud-top-left .label, .hud-top-left .record-line { font-size: 8px; }
   .hud-top-center { top: calc(env(safe-area-inset-top, 0px) + 88px); width: 94%; }
   .callout { min-height: 31px; font-size: 14px; }.combo-wrap { min-width: 150px; padding: 5px 10px 7px; }.combo-wrap b { font-size: 18px; }
-  .touch-capable .hud-bottom-right { top: calc(env(safe-area-inset-top, 0px) + 4px); right: 3px; transform: scale(.42); }
   .crash-stripe { top: 7%; }.compact-panel, .result-panel { width: calc(100vw - 28px); max-height: calc(100dvh - 28px); padding: 23px; overflow-y: auto; }
   .result-panel h2 { font-size: 46px; }.result-grid { grid-template-columns: 1fr; }.result-grid div { padding: 10px; }
 }
@@ -227,10 +226,51 @@
 }
 
 
-/* The instrument cluster reflows above the touch controls; labels stay legible. */
+/* Responsive instrument sizing. */
 @media(max-width:1000px){.hud-top-center{top:104px;width:70%}.hud-bottom-right{transform:scale(.84);transform-origin:right bottom}}
-@media(max-width:800px) and (orientation:portrait){.menu-boot{top:calc(env(safe-area-inset-top,0px) + 10px)}.menu-boot b,.menu-boot i{display:none}.tuner-stripes{display:none}.menu-screen h1{font-size:clamp(42px,13vw,64px)}.menu-panel select{font-size:12px}.hud-top-left{top:calc(env(safe-area-inset-top,0px) + 55px);left:16px}.score{font-size:34px}.hud-top-center{top:calc(env(safe-area-inset-top,0px) + 120px);width:94%}.callout{font-size:17px}.combo-wrap{padding:5px 8px 8px}.touch-capable .hud-bottom-right,.hud-bottom-right{top:auto;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 185px);width:300px;height:184px;transform:none}.speed-gauge{width:184px;height:184px}.gauge-rpm{width:140px;height:140px;bottom:22px}.speed-block b{font-size:19px}.gear-window b{font-size:15px}.boost-shell{width:104px;font-size:7px;left:5px}.result-panel h2{font-size:50px}.car-selector{background:var(--ui-panel)}.menu-start-button{background:linear-gradient(100deg,#c0df65,#879c48);color:var(--ink);border-color:var(--accent);box-shadow:inset 4px 0 #eff9cb,0 0 25px #0008}.menu-start-button:hover{background:#cce879;color:var(--ink)}}
-@media(max-height:650px) and (orientation:portrait){.touch-capable .hud-bottom-right{width:254px;height:156px;bottom:170px}.speed-gauge{width:156px;height:156px}.gauge-rpm{width:119px;height:119px}.hud-top-center{top:103px}.rpm-window b{font-size:9px}}
+@media(max-width:800px) and (orientation:portrait){.menu-boot{top:calc(env(safe-area-inset-top,0px) + 10px)}.menu-boot b,.menu-boot i{display:none}.tuner-stripes{display:none}.menu-screen h1{font-size:clamp(42px,13vw,64px)}.menu-panel select{font-size:12px}.score{font-size:34px}.callout{font-size:17px}.combo-wrap{padding:5px 8px 8px}.result-panel h2{font-size:50px}.car-selector{background:var(--ui-panel)}.menu-start-button{background:linear-gradient(100deg,#c0df65,#879c48);color:var(--ink);border-color:var(--accent);box-shadow:inset 4px 0 #eff9cb,0 0 25px #0008}.menu-start-button:hover{background:#cce879;color:var(--ink)}}
+
+/* Reserve the top row for pause/camera/recover, then place the instruments
+   beside the score. Keep the road and the entire pedal stack unobstructed. */
+@media (max-width: 800px) and (orientation: portrait) {
+  .hud-top-left {
+    top: calc(env(safe-area-inset-top, 0px) + 74px);
+    left: calc(env(safe-area-inset-left, 0px) + 12px);
+  }
+  .hud-top-center { top: calc(env(safe-area-inset-top, 0px) + 74px + clamp(111px, 32vw, 136px)); }
+  .hud-bottom-right, .touch-capable .hud-bottom-right {
+    top: calc(env(safe-area-inset-top, 0px) + 64px);
+    right: calc(env(safe-area-inset-right, 0px) + 10px);
+    bottom: auto;
+    width: clamp(180px, 52vw, 220px);
+    height: auto;
+    aspect-ratio: 390 / 240;
+    transform: none;
+  }
+  .gauge-cluster { height: auto; aspect-ratio: 390 / 240; }
+  .speed-gauge { width: 61.5385%; height: auto; aspect-ratio: 1; }
+  .gauge-rpm { width: 46.6667%; height: auto; aspect-ratio: 1; bottom: 10.8333%; }
+  .speed-block { padding: 2px 4px; }
+  .speed-block b { font-size: 14px; }
+  .gear-window b { font-size: 11px; }
+  .gear-window small { font-size: 5px; }
+  .rpm-window b { font-size: 8px; }
+  .boost-shell { width: 35%; left: 2.3%; bottom: 3px; font-size: 6px; }
+  .boost-shell label { margin-bottom: 3px; }
+  .boost-shell > div { height: 4px; }
+}
+
+/* Short landscape screens have room between the steering and pedal controls. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .touch-capable .hud-bottom-right {
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    transform: translateX(-50%) scale(.46);
+    transform-origin: center bottom;
+  }
+}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 @media(max-width:1000px) and (orientation:landscape){.menu-screen .title-lockup{width:27vw;left:3vw}.menu-screen .menu-panel{width:29vw;right:3vw}.car-showcase{min-width:0;left:29vw;right:31vw}.car-selector{grid-template-columns:38px 1fr 38px}.car-identity p{display:none}.car-identity h2{font-size:18px}}
