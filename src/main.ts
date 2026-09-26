@@ -498,7 +498,9 @@ let tiltSteer = 0;
 let tiltCalibrated = false;
 let tiltPermissionReady = false;
 let mobileSwipeBoostUntil = 0;
-const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
+const searchParams = new URLSearchParams(location.search);
+const DEBUG = searchParams.get('debug') === '1';
+const UI_TEST = searchParams.get('ui-test') === '1';
 
 try {
   if (localStorage.getItem('midnight-loop-mobile-controls') === 'tilt') mobileControlMode = 'tilt';
@@ -1567,13 +1569,13 @@ function frame(timeMs: number): void {
   cameraPass.uniforms.uImpact.value = mode === 'crashing' ? 1 : Math.max(0, Math.min(1, damageUntil - runClock));
   cameraPass.uniforms.uHeavyDither.value = ditherCheckbox.checked ? 1 : 0;
   cameraPass.uniforms.uShowroom.value = mode === 'menu' ? 1 : 0;
-  composer.render();
+  if (!UI_TEST) composer.render();
   requestAnimationFrame(frame);
 }
 
 // The probe discovers the live catalog and samples production materials/camera/postprocessing.
 // It is opt-in and has no effect on normal play.
-if (new URLSearchParams(location.search).has('visual-test')) {
+if (searchParams.has('visual-test')) {
   const { captureShowroom } = await import('./game/showroomProbe');
   Object.assign(window, { __SHOWROOM_TEST__: {
     cars: CAR_DEFINITIONS,

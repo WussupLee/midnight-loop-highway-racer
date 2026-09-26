@@ -16,7 +16,9 @@ for (const [name, width, height] of [['small', 320, 568], ['portrait', 390, 844]
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto('/?debug=1');
+    // This suite validates DOM HUD/control behavior. The showroom suite owns
+    // real WebGL output checks, so avoid competing with SwiftShader here.
+    await page.goto('/?debug=1&ui-test=1');
     await expect(page.locator('#loading')).toBeHidden({ timeout: 60000 });
     // The test panel is not product UI and must not obscure touch targets.
     await page.locator('#debug-panel').evaluate(node => node.classList.add('hidden'));
