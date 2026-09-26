@@ -12,6 +12,7 @@ Requirements for local development: Node.js 22 or newer and desktop Chrome. The 
 
 ```bash
 npm install
+npx playwright install chromium
 npm run dev
 ```
 
@@ -26,6 +27,8 @@ npm run test
 npm run build
 npm run preview
 ```
+
+Every `npm run build` now includes the unit suite and rendered visual checks against the production bundle. The visual tests discover every car in the live catalog, inspect eight rotation angles at four desktop/phone sizes, and reject clipping, excessive zoom, dark bodywork or blown highlights. Mobile checks cover HUD overlap, touch-target size, simultaneous inputs, pause/resume and keyboard-hint visibility. Results and screenshots are saved to `playwright-report/` and `test-results/`; use `npm run test:visual` to rerun against the latest build. See [the research and measurement record](RESEARCH-2026-09-25.md) for sources, thresholds and the steering/drift comparison.
 
 ## Tuner Series 02
 

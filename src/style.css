@@ -68,7 +68,7 @@
 .touch-capable .controls-grid { display: none; }
 .touch-capable .hud-bottom-right { top: calc(env(safe-area-inset-top, 0px) + 7px); right: 7px; bottom: auto; transform: scale(.52); transform-origin: right top; }
 
-@media (max-width: 800px) and (orientation: portrait) {
+@media (max-width: 1000px) and (orientation: portrait) {
   .menu-screen { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 18px; padding: calc(env(safe-area-inset-top, 0px) + 63px) 18px calc(env(safe-area-inset-bottom, 0px) + 25px); overflow-y: auto; touch-action: pan-y; }
   .menu-screen .title-lockup { flex: 0 0 auto; align-self: stretch; transform: none; }
   .menu-screen h1 { max-width: 100%; margin-top: 9px; font-size: clamp(52px, 19vw, 78px); line-height: .78; }
@@ -198,7 +198,7 @@
   .car-showcase { right: 32vw; left: 31vw; }
 }
 
-@media (max-width: 800px) and (orientation: portrait) {
+@media (max-width: 1000px) and (orientation: portrait) {
   .menu-screen {
     display: flex;
     flex-direction: column;
@@ -232,7 +232,7 @@
 
 /* Reserve the top row for pause/camera/recover, then place the instruments
    beside the score. Keep the road and the entire pedal stack unobstructed. */
-@media (max-width: 800px) and (orientation: portrait) {
+@media (max-width: 1000px) and (orientation: portrait) {
   .hud-top-left {
     top: calc(env(safe-area-inset-top, 0px) + 74px);
     left: calc(env(safe-area-inset-left, 0px) + 12px);
@@ -274,3 +274,89 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 @media(max-width:1000px) and (orientation:landscape){.menu-screen .title-lockup{width:27vw;left:3vw}.menu-screen .menu-panel{width:29vw;right:3vw}.car-showcase{min-width:0;left:29vw;right:31vw}.car-selector{grid-template-columns:38px 1fr 38px}.car-identity p{display:none}.car-identity h2{font-size:18px}}
+
+/* Touch HUD: telemetry above the road, driving actions in the two thumb zones. */
+.touch-only { display: none; }
+.touch-capable .keyboard-only { display: none !important; }
+.touch-capable .touch-only { display: block; }
+.touch-capable .mobile-secondary-controls {
+  left: auto; right: calc(env(safe-area-inset-right, 0px) + 12px);
+  top: calc(env(safe-area-inset-top, 0px) + 12px); gap: 6px; transform: none;
+}
+.touch-capable .mobile-secondary { width: 44px; height: 44px; border-radius: 8px; }
+.touch-capable .mobile-controls button {
+  opacity: .82; color: var(--paper); border-color: #d8ddbd80; background: #0b100e70;
+}
+.touch-capable .mobile-controls button.is-pressed { opacity: 1; background: #c0df6538; border-color: var(--accent); }
+.touch-capable .hud-top-left { top: calc(env(safe-area-inset-top, 0px) + 14px); left: calc(env(safe-area-inset-left, 0px) + 14px); }
+.touch-capable .hud-top-left .score { font-size: 28px; }
+.touch-capable .hud-top-center {
+  top: calc(env(safe-area-inset-top, 0px) + 88px); left: calc(env(safe-area-inset-left, 0px) + 14px);
+  width: calc(100% - 164px); transform: none; text-align: left; display: flex; flex-direction: column; align-items: flex-start;
+}
+.touch-capable .combo-wrap { order: -1; min-width: 0; max-width: 100%; gap: 6px; padding: 6px 7px 8px; font-size: 7px; }
+.touch-capable .combo-wrap b { font-size: 15px; }
+.touch-capable .combo-wrap small { font-size: 7px; padding-left: 6px; }
+.touch-capable .drift-pending { margin-top: 7px; font-size: 8px; }
+.touch-capable .callout { font-size: 14px; min-height: 20px; }
+.touch-capable .hud-bottom-right {
+  top: calc(env(safe-area-inset-top, 0px) + 72px); right: calc(env(safe-area-inset-right, 0px) + 14px);
+  bottom: auto; left: auto; width: 124px; height: 88px; aspect-ratio: auto; transform: none;
+}
+.touch-capable .gauge-cluster { height: 88px; aspect-ratio: auto; }
+.touch-capable #speed-face, .touch-capable #rpm-face { display: none; }
+.touch-capable .speed-gauge { inset: 0 0 auto auto; width: 124px; height: 50px; aspect-ratio: auto; }
+.touch-capable .speed-block { top: 0; left: auto; right: 32px; transform: none; padding: 0; border: 0; background: none; text-align: right; }
+.touch-capable .speed-block b { font: italic 700 34px/1 var(--display-font); color: var(--paper); }
+.touch-capable .speed-block span { display: block; font: 8px var(--data-font); color: var(--ui-dim); }
+.touch-capable .gear-window { top: 4px; right: 0; }
+.touch-capable .gear-window small { font-size: 6px; }
+.touch-capable .gear-window b { font-size: 20px; }
+.touch-capable .gauge-rpm { left: auto; right: 0; bottom: 22px; width: 124px; height: 12px; aspect-ratio: auto; }
+.touch-capable .rpm-window { inset: 0; transform: none; text-align: right; }
+.touch-capable .rpm-window b { font-size: 8px; }
+.touch-capable .rpm-window span { display: inline; margin-left: 4px; font-size: 7px; }
+.touch-capable .boost-shell { left: 0; bottom: 0; width: 124px; font-size: 7px; }
+.touch-capable .boost-shell > div { height: 4px; }
+.touch-capable .mobile-steering { width: min(43vw, 174px); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
+.touch-capable .mobile-arrow { width: calc((100% - 6px) / 2); height: 82px; }
+.touch-capable .mobile-pedals { height: 196px; grid-template-rows: 58px 130px; }
+.touch-capable .mobile-throttle { height: 130px; }
+.touch-capable .mobile-brake { height: 88px; }
+.touch-capable .mobile-handbrake { height: 56px; }
+.touch-capable .mobile-handbrake > i { top: 7px; height: 29px; }
+.touch-capable .mobile-handbrake > span { font-size: 7px; }
+@media (orientation: landscape) {
+  .touch-capable .hud-top-center { top: calc(env(safe-area-inset-top, 0px) + 16px); left: 35%; width: 30%; align-items: center; text-align: center; }
+  .touch-capable .mobile-pedals { height: 172px; grid-template-rows: 50px 114px; }
+  .touch-capable .mobile-throttle { height: 114px; }
+  .touch-capable .mobile-handbrake { height: 48px; }
+  .touch-capable .mobile-handbrake > i { height: 22px; }
+}
+@media (max-width: 350px) and (orientation: portrait) {
+  .touch-capable .mobile-secondary-controls { gap: 3px; right: 8px; }
+  .touch-capable .hud-top-left .score { font-size: 24px; }
+  .touch-capable .hud-top-center { width: calc(100% - 164px); }
+  .touch-capable .combo-wrap { flex-wrap: wrap; }
+}
+.touch-capable #mobile-calibrate {
+  position: fixed; top: auto; right: auto; left: calc(env(safe-area-inset-left, 0px) + 14px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 114px);
+}
+.mute-indicator { pointer-events: none; }
+.touch-capable .mute-indicator {
+  top: calc(env(safe-area-inset-top, 0px) + 66px); bottom: auto;
+  left: calc(env(safe-area-inset-left, 0px) + 14px); transform: none;
+  font-size: 8px; padding: 3px 6px;
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .menu-screen .title-lockup { top: 72px; }
+  .menu-screen .route-data { display: none; }
+  .menu-screen .menu-panel { top: 72px; max-height: calc(100dvh - 150px); }
+  .car-showcase { top: 52px; bottom: 72px; }
+  .car-drag-surface { bottom: 68px; }
+  .car-selector { bottom: 12px; min-height: 62px; }
+  .spin-hint { bottom: 0; }
+  .menu-start-button { height: 54px; bottom: 12px; }
+  .menu-screen footer { display: none; }
+}

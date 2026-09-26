@@ -164,7 +164,8 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
 
   const bodyAngle = Math.atan2(Math.abs(v), Math.max(4, Math.abs(u)));
   const slideTarget = input.handbrake ? 1 : state.driftBlend > .2 && bodyAngle > .105 ? .55 : 0;
-  state.driftBlend += (slideTarget - state.driftBlend) * Math.min(1, dt / (input.handbrake ? .10 : HANDLING.gripRecoverySeconds));
+  // A brief touch loads the rear axle progressively; a held lever still initiates a slide.
+  state.driftBlend += (slideTarget - state.driftBlend) * (1 - Math.exp(-dt / (input.handbrake ? .22 : HANDLING.gripRecoverySeconds)));
   const assist = 1 - state.driftBlend;
   state.handlingPhase = input.handbrake ? 'initiation' : state.driftBlend > .25 && bodyAngle > .07 ? 'slide' : state.driftBlend > .05 ? 'recovery' : 'grip';
   const highSpeedSteer = clamp((speed - 22) / 52, 0, 1);
@@ -179,9 +180,9 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
     && Math.sign(input.steer) !== Math.sign(state.steering);
   const activeSteerRate = input.handbrake
     ? 3.85 - highSpeedSteer * .68
-    : 3.8 - highSpeedSteer * .55 + (steeringInputReversal ? 5.8 : 0);
+    : 5.0 - highSpeedSteer * .65 + (steeringInputReversal ? 4.8 : 0);
   const steerRate = input.steer === 0 ? 7.2 : activeSteerRate;
-  state.steering += (input.steer - state.steering) * Math.min(1, steerRate * dt);
+  state.steering += (input.steer - state.steering) * (1 - Math.exp(-steerRate * dt));
   state.throttle += (input.throttle - state.throttle) * Math.min(1, (input.throttle > state.throttle ? HANDLING.throttleResponse : HANDLING.releaseResponse) * dt);
   state.brake += (input.brake - state.brake) * Math.min(1, 8 * dt);
   const maxSteer = speedSensitiveSteer(speed);
@@ -231,7 +232,7 @@ export function stepVehicle(state: VehicleState, input: DriverInput, dt: number)
   let rearLateral = -(112000 + over120Stability * 12000 - state.driftBlend * 20000) * rearSlip * corneringScale;
   frontLongDemand = clamp(frontLongDemand, -frontMu * frontLoad, frontMu * frontLoad);
   const frontCapacity = Math.sqrt(Math.max(0, (frontMu * frontLoad) ** 2 - frontLongDemand ** 2));
-  const handbrakeLong = input.handbrake ? -Math.sign(u) * Math.min(5900, rearMu * rearLoad * 0.78) : 0;
+  const handbrakeLong = input.handbrake ? -Math.sign(u) * Math.min(5900, rearMu * rearLoad * 0.78) * state.driftBlend : 0;
   const rearLongTotal = clamp(rearLongDemand + handbrakeLong, -rearMu * rearLoad, rearMu * rearLoad);
   const rearCapacity = Math.sqrt(Math.max(0, (rearMu * rearLoad) ** 2 - rearLongTotal ** 2));
   frontLateral = frontCapacity > 0 ? frontCapacity * Math.tanh(frontLateral / frontCapacity) : 0;

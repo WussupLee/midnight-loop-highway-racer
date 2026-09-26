@@ -1,4 +1,5 @@
 import './style.css';
+import { vehicleBounds, frameShowroom, createShowroomLights, showroomMaterials } from './game/showroom';
 import { dialMarkup, dialAngle, dampNeedle, SPEED_DIAL, RPM_DIAL } from './game/instruments';
 import { ScoreLedger, type ScoreSource } from './game/scoreLedger';
 import { carContact } from './game/contact';
@@ -182,6 +183,7 @@ const cameraPass = new ShaderPass({
     uSpeed: { value: 0 },
     uImpact: { value: 0 },
     uHeavyDither: { value: 1 },
+    uShowroom: { value: 0 },
     starburstIntensity: { value: .34 },
     starburstThreshold: { value: .972 },
     starburstLength: { value: .5 },
@@ -202,6 +204,7 @@ const cameraPass = new ShaderPass({
     uniform float uSpeed;
     uniform float uImpact;
     uniform float uHeavyDither;
+    uniform float uShowroom;
     uniform float starburstIntensity;
     uniform float starburstThreshold;
     uniform float starburstLength;
@@ -333,6 +336,11 @@ const cameraPass = new ShaderPass({
       // Deliberately heavy early-digital ordered dithering. Two physical
       // pixels share each Bayer sample, and a reduced color ladder makes the
       // pattern legible in road gradients, fog, bodywork, and light bloom.
+      // Garage inspection uses a smooth highlight shoulder instead of clipping
+      // reflected softboxes, then lifts midtones above the night-video quantizer.
+      vec3 garageColor = max(color, vec3(0.0));
+      garageColor = pow(garageColor / (vec3(1.0) + garageColor), vec3(.72));
+      color = mix(color, garageColor, uShowroom);
       float ditherThreshold = bayer4(floor(gl_FragCoord.xy * .5)) - .5;
       float ditherLevels = 9.0;
       vec3 dithered = floor(clamp(color, 0.0, 1.0) * ditherLevels + ditherThreshold + .5) / ditherLevels;
@@ -395,6 +403,11 @@ const playerCars: Record<CarId, PlayerCarVisual> = {
   'asterion-vxr': asterionCar,
   'kitsune-r-spec': kitsuneCar,
 };
+const showroomBounds = Object.fromEntries(Object.entries(playerCars).map(([id, car]) => {
+  return [id, vehicleBounds(car.group)];
+})) as Record<CarId, THREE.Box3>;
+const setShowroomMaterials = Object.values(playerCars).map(car => showroomMaterials(car.group, scene.environment!));
+const showroomLights = createShowroomLights(scene);
 let selectedCarId: CarId = 'asterion-vxr';
 try {
   const storedCar = localStorage.getItem('midnight-loop-selected-car');
@@ -558,6 +571,7 @@ let showroomDragging = false;
 let showroomPointerId = -1;
 let showroomLastPointerX = 0;
 let showroomAutoResumeAt = 0;
+let showroomTestFrozen = false;
 
 function updateCarSelectionUi(): void {
   const definition = carDefinition(selectedCarId);
@@ -587,7 +601,7 @@ function stepCarSelection(direction: -1 | 1): void {
 }
 
 function updateShowroom(dt: number, now: number): void {
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches && !showroomDragging && now >= showroomAutoResumeAt) showroomYaw += dt * .34;
+  if (!showroomTestFrozen && !matchMedia('(prefers-reduced-motion: reduce)').matches && !showroomDragging && now >= showroomAutoResumeAt) showroomYaw += dt * .34;
   showroomVehicle.x = roadCenterX(16);
   showroomVehicle.z = 16;
   showroomVehicle.yaw = showroomYaw;
@@ -597,19 +611,9 @@ function updateShowroom(dt: number, now: number): void {
   playerCar.group.rotation.x = 0;
   playerCar.group.rotation.z = 0;
   const roadY = roadCenterY(showroomVehicle.z);
-  const portraitShowroom = MOBILE_DEVICE && innerHeight > innerWidth;
-  if (portraitShowroom) {
-    // Aim below the axle line to lift the car clear of the selector while also
-    // bringing it closer in the narrow mobile viewport.
-    camera.position.set(showroomVehicle.x + 4.55, roadY + 2.25, showroomVehicle.z - 5.35);
-    camera.lookAt(showroomVehicle.x, roadY - .16, showroomVehicle.z);
-  } else {
-    camera.position.set(showroomVehicle.x + 5.4, roadY + 2.2, showroomVehicle.z - 6.25);
-    camera.lookAt(showroomVehicle.x, roadY + .66, showroomVehicle.z);
-  }
-  const showroomFov = portraitShowroom ? 43 : 47;
-  camera.fov += (showroomFov - camera.fov) * Math.min(1, dt * 7);
-  camera.updateProjectionMatrix();
+  showroomLights.position.set(showroomVehicle.x, roadY, showroomVehicle.z);
+  frameShowroom(camera, showroomBounds[selectedCarId], playerCar.group.position,
+    carDragSurface.getBoundingClientRect(), innerWidth, innerHeight);
 }
 
 updateCarSelectionUi();
@@ -639,6 +643,9 @@ function setMode(next: GameMode): void {
   if (next === 'menu') {
     showroomAutoResumeAt = performance.now() / 1000 + .65;
     updateCarSelectionUi();
+    for (const setMaterials of setShowroomMaterials) setMaterials(true);
+    showroomLights.visible = true;
+    updateShowroom(0, performance.now() / 1000);
   }
 }
 
@@ -1375,8 +1382,7 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyR') recoverCurrentVehicle();
   if (event.code === 'KeyC' && (mode === 'running' || mode === 'paused')) toggleCamera();
   if (event.code === 'KeyM') {
-    const muted = audio.toggleMute();
-    muteIndicator.classList.toggle('hidden', !muted);
+    toggleAudio();
   }
 }, { passive: false });
 window.addEventListener('keyup', (event) => { pressed.delete(event.code); });
@@ -1444,6 +1450,13 @@ for (const button of mobileControls.querySelectorAll<HTMLButtonElement>('[data-m
   button.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 mobilePauseButton.addEventListener('click', () => { if (mode === 'running') togglePause(); });
+function toggleAudio(): void {
+  const muted = audio.toggleMute();
+  muteIndicator.classList.toggle('hidden', !muted);
+  element('pause-mute').textContent = muted ? 'UNMUTE AUDIO' : 'MUTE AUDIO';
+  element('pause-mute').setAttribute('aria-pressed', String(muted));
+}
+element('pause-mute').addEventListener('click', toggleAudio);
 mobileCameraButton.addEventListener('click', () => { if (mode === 'running') toggleCamera(); });
 mobileRecoverButton.addEventListener('click', recoverCurrentVehicle);
 mobileCalibrateButton.addEventListener('click', () => {
@@ -1496,6 +1509,7 @@ restartButton.addEventListener('click', startRun);
 gameoverQuitButton.addEventListener('click', quitToMenu);
 
 function frame(timeMs: number): void {
+  if (showroomTestFrozen && mode === 'menu') { requestAnimationFrame(frame); return; }
   const now = timeMs / 1000;
   const realDt = Math.min(.05, Math.max(0, now - lastTime));
   lastTime = now;
@@ -1524,8 +1538,13 @@ function frame(timeMs: number): void {
 
   highway.update(vehicle.z);
   if (mode === 'menu') {
+    for (const setMaterials of setShowroomMaterials) setMaterials(true);
+    showroomLights.visible = true;
     updateShowroom(realDt, now);
   } else {
+    for (const setMaterials of setShowroomMaterials) setMaterials(false);
+    showroomLights.visible = false;
+    camera.clearViewOffset();
     playerCar.update(renderVehicle, getInput().brake > .1, realDt);
     chaseCamera.update(renderVehicle, realDt);
   }
@@ -1547,10 +1566,32 @@ function frame(timeMs: number): void {
   cameraPass.uniforms.uSpeed.value = Math.max(0, Math.min(1, (vehicle.speedMph - 70) / 110));
   cameraPass.uniforms.uImpact.value = mode === 'crashing' ? 1 : Math.max(0, Math.min(1, damageUntil - runClock));
   cameraPass.uniforms.uHeavyDither.value = ditherCheckbox.checked ? 1 : 0;
+  cameraPass.uniforms.uShowroom.value = mode === 'menu' ? 1 : 0;
   composer.render();
   requestAnimationFrame(frame);
 }
 
+// The probe discovers the live catalog and samples production materials/camera/postprocessing.
+// It is opt-in and has no effect on normal play.
+if (new URLSearchParams(location.search).has('visual-test')) {
+  const { captureShowroom } = await import('./game/showroomProbe');
+  Object.assign(window, { __SHOWROOM_TEST__: {
+    cars: CAR_DEFINITIONS,
+    capture(id: CarId, yaw: number) {
+      selectCar(id); showroomYaw = yaw; showroomTestFrozen = true;
+      updateShowroom(0, 0);
+      cameraPass.uniforms.uTime.value = 0;
+      cameraPass.uniforms.uSpeed.value = 0;
+      cameraPass.uniforms.uShowroom.value = 1;
+      const rect = carDragSurface.getBoundingClientRect();
+      return { ...captureShowroom(renderer, camera, playerCar.group, () => composer.render()),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        viewport: { width: innerWidth, height: innerHeight },
+        fallback: Boolean(element('asset-status').textContent),
+      };
+    },
+  } });
+}
 requestAnimationFrame(frame);
 resize();
 element('loading-stage').textContent = 'GARAGE READY / START YOUR RUN';
