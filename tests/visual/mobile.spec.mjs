@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+const captureUi = async (page, path) => {
+  // SwiftShader can take longer than Playwright's action timeout to read back a
+  // continuously-rendering WebGL canvas. Showroom tests cover the rendered
+  // vehicles; these snapshots are evidence for the DOM HUD and touch layout.
+  await page.locator('canvas').evaluate(canvas => { canvas.style.visibility = 'hidden'; });
+  await page.screenshot({ path, timeout: 30000 });
+  await page.locator('canvas').evaluate(canvas => { canvas.style.visibility = ''; });
+};
 for (const [name, width, height] of [['small', 320, 568], ['portrait', 390, 844], ['landscape', 844, 390], ['tablet', 820, 1180]]) {
   test(`${name}: touch controls, readable HUD and no keyboard-only instructions`, async ({ browser }, info) => {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
@@ -37,7 +45,7 @@ for (const [name, width, height] of [['small', 320, 568], ['portrait', 390, 844]
       expect(box.width).toBeGreaterThanOrEqual(44);
       expect(box.height).toBeGreaterThanOrEqual(44);
     }
-    await page.screenshot({ path: info.outputPath('driving.png') });
+    await captureUi(page, info.outputPath('driving.png'));
     await page.getByRole('button', { name: 'Pause game', exact: true }).click();
     await expect(page.locator('#pause')).toBeVisible();
     await expect(page.locator('#pause .keyboard-only')).toBeHidden();
@@ -75,7 +83,7 @@ for (const [name, width, height] of [['small', 320, 568], ['portrait', 390, 844]
       tiltBoxes.push(box);
     }
     for (let i = 0; i < tiltBoxes.length; i++) for (let j = i + 1; j < tiltBoxes.length; j++) expect(overlaps(tiltBoxes[i], tiltBoxes[j])).toBe(false);
-    await page.screenshot({ path: info.outputPath('tilt.png') });
+    await captureUi(page, info.outputPath('tilt.png'));
     expect(errors).toEqual([]);
     await context.close();
   });
